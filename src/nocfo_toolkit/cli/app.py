@@ -14,6 +14,7 @@ from nocfo_toolkit.cli.commands import (
     invoices,
     products,
     purchase_invoices,
+    reports,
     tags,
     user,
 )
@@ -77,6 +78,7 @@ app.add_typer(products.app, name="products")
 app.add_typer(files.app, name="files")
 app.add_typer(tags.app, name="tags")
 app.add_typer(user.app, name="user")
+app.add_typer(reports.app, name="reports")
 
 
 if __name__ == "__main__":
