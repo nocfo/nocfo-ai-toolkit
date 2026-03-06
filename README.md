@@ -6,8 +6,8 @@
 
 ### Give AI assistants full access to Finnish bookkeeping, invoicing, and business data.
 
-[![PyPI](https://img.shields.io/pypi/v/nocfo-cli?color=%230073E6&label=PyPI)](https://pypi.org/project/nocfo-cli/)
-[![Python](https://img.shields.io/pypi/pyversions/nocfo-cli?color=%230073E6)](https://pypi.org/project/nocfo-cli/)
+[![PyPI](https://img.shields.io/badge/PyPI-v0.1.0-%230073E6)](https://pypi.org/project/nocfo-cli/)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-%230073E6)](https://pypi.org/project/nocfo-cli/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-%230073E6)](LICENSE)
 
 </div>
