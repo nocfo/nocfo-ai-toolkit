@@ -6,7 +6,7 @@
 
 ### Give AI assistants full access to Finnish bookkeeping, invoicing, and business data.
 
-[![PyPI](https://img.shields.io/badge/PyPI-v0.1.0-%230073E6)](https://pypi.org/project/nocfo-cli/)
+[![PyPI](https://img.shields.io/pypi/v/nocfo-cli)](https://pypi.org/project/nocfo-cli/)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-%230073E6)](https://pypi.org/project/nocfo-cli/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-%230073E6)](LICENSE)
 
@@ -14,126 +14,78 @@
 
 Open-source Python toolkit that connects [NoCFO](https://nocfo.io) to your terminal and AI workflows — a single package powering a CLI client, an MCP server, and a Cursor AI skill.
 
-## Features
+## What You Can Ask
 
-- **All-in-one package** — CLI, MCP server, and Cursor skill from a single `pip install`
-- **60+ MCP tools** across 11 domains (businesses, accounts, invoices, contacts, documents, and more)
-- **OpenAPI-driven** — tools stay in sync with the live NoCFO API schema
-- **PAT authentication** — simple token-based auth with config file, env var, or CLI flag
-- **Dual output** — human-friendly tables for terminals, JSON for scripts and pipelines
-- **Claude Desktop + Cursor** — works as stdio MCP server or standalone CLI
-- **Zero-config run** — `uvx nocfo-cli --help` with no permanent install
+After connecting, you can ask your AI assistant things like:
 
-## Quick Install
+- "How many sales invoices do I have this month?"
+- "Who are my top 10 customers by revenue this year?"
+- "Show unpaid invoices due this week."
+- "List bookkeeping documents from January."
+- "What was my VAT total last quarter?"
 
-**pip** (recommended)
+## Why This Is Useful
+
+- One connection gives your AI assistant direct access to NoCFO business data
+- No need to manually export CSV files for common questions
+- Works for both non-technical users and developers
+
+## Fastest Setup (Hosted MCP)
+
+Use the hosted endpoint `mcp.nocfo.io` when your AI client supports remote MCP connectors.
+
+### Connect to Claude
+
+1. Open Claude settings and go to **Connectors / MCP**.
+2. Add a new connector.
+3. Enter server URL: `mcp.nocfo.io`
+4. Sign in with your NoCFO account when prompted.
+5. Open a new chat and test:
+   - "List my businesses"
+   - "Show this month's sales invoices"
+
+### Connect to ChatGPT
+
+If your ChatGPT plan includes MCP/custom connectors:
+
+1. Open ChatGPT settings and go to **Connectors / Integrations**.
+2. Add a custom MCP connector.
+3. Set server URL to `mcp.nocfo.io`
+4. Complete sign-in flow with your NoCFO account.
+5. Test with:
+   - "List my contacts"
+   - "Show unpaid purchase invoices"
+
+> If your workspace does not yet show MCP/custom connector options, use the local setup below with Claude Desktop or Cursor.
+
+---
+
+## Local Setup (Claude Desktop)
+
+Use this when you want to run MCP locally on your machine.
+
+### 1) Install the toolkit
 
 ```bash
 pip install nocfo-cli
 ```
 
-**pipx** (isolated install)
-
-```bash
-pipx install nocfo-cli
-```
-
-**uvx** (no install needed)
+Alternative (no permanent install):
 
 ```bash
 uvx nocfo-cli --help
 ```
 
-## Authentication
+### 2) Create NoCFO API token
 
-Create a Personal Access Token at [login.nocfo.io/auth/tokens](https://login.nocfo.io/auth/tokens), then configure once:
+1. Open [login.nocfo.io/auth/tokens](https://login.nocfo.io/auth/tokens/)
+2. Click **Luo uusi avain** / **Create new key**
+3. Name it (for example: `Claude Desktop`)
+4. Copy the token and save it to a password manager
 
-```bash
-nocfo auth configure --token <your_pat>
-nocfo auth status
-```
+### 3) Add NoCFO MCP to Claude config
 
-Or pass via environment:
-
-```bash
-export NOCFO_API_TOKEN=<your_pat>
-```
-
-<details>
-<summary>Auth precedence & defaults</summary>
-
-| Priority | Source                            |
-| -------- | --------------------------------- |
-| 1        | `--api-token` CLI flag            |
-| 2        | `NOCFO_API_TOKEN` env var         |
-| 3        | `~/.config/nocfo-cli/config.json` |
-
-Default base URL: `https://api-prd.nocfo.io`
-Default output format: `table`
-
-</details>
-
-## Quick Start
-
-```bash
-nocfo user me                        # current user info
-nocfo businesses list                # list all businesses
-nocfo invoices list --business slug  # sales invoices
-nocfo documents list --business slug --query date_from=2026-01-01
-nocfo contacts create --business slug --field name=Acme
-```
-
-JSON output for automation:
-
-```bash
-nocfo --output json businesses list | jq '.results[]'
-```
-
-## Set Up with Claude Desktop (step-by-step)
-
-Connect NoCFO to Claude so you can ask questions about your bookkeeping in plain language. No coding experience needed.
-
-### 1. Install Python
-
-NoCFO AI Toolkit needs Python 3.10 or newer.
-
-**Mac** — open **Terminal** (search "Terminal" in Spotlight) and run:
-
-```bash
-brew install python
-```
-
-> Don't have Homebrew? Install it first: https://brew.sh
-
-**Windows** — download from https://www.python.org/downloads/ and run the installer. **Check the box** "Add Python to PATH" during install.
-
-Verify it works:
-
-```bash
-python3 --version
-```
-
-You should see `Python 3.10` or higher.
-
-### 2. Get your NoCFO token
-
-You need a Personal Access Token (PAT) so that Claude can read your NoCFO data on your behalf.
-
-1. Open [login.nocfo.io/auth/tokens](https://login.nocfo.io/auth/tokens/) in your browser
-2. **Log in** with your NoCFO account (Apple, Google, Microsoft, or email)
-3. After login, you'll see the **API-avaimet** (API keys) page
-4. Click **Luo uusi avain** ("Create new key")
-5. Give the token a name you'll recognise, e.g. `Claude Desktop`
-6. Click **Luo** ("Create")
-7. The token appears once — **copy it now** and save it somewhere safe (e.g. a password manager). You won't be able to see it again.
-
-> **Tip:** If you lose the token, you can always delete the old one and create a new one from the same page.
-
-### 3. Configure Claude Desktop
-
-1. Open **Claude Desktop**
-2. Go to **Settings → Developer → Edit Config** (or open the file manually — see paths below)
-3. Paste the following into the config file, replacing `your_token_here` with the token from step 2:
+Open Claude Desktop config and add:
 
 ```json
 {
@@ -149,10 +101,10 @@ You need a Personal Access Token (PAT) so that Claude can read your NoCFO data o
 }
 ```
 
-> If the file already has other servers configured, add the `"nocfo": { ... }` block inside the existing `"mcpServers"` object.
+Then restart Claude Desktop.
 
 <details>
-<summary>Config file locations</summary>
+<summary>Claude config file locations</summary>
 
 | OS      | Path                                                              |
 | ------- | ----------------------------------------------------------------- |
@@ -161,33 +113,49 @@ You need a Personal Access Token (PAT) so that Claude can read your NoCFO data o
 
 </details>
 
-4. **Restart Claude Desktop**
+## Local Setup (Cursor)
 
-### 4. Try it out
-
-Open a new chat in Claude and ask:
-
-- _"Listaa yritykseni"_
-- _"Montako myyntilaskua on tällä kuussa?"_
-- _"Ketkä ovat suurimmat asiakkaani?"_
-
-Claude uses NoCFO tools automatically to answer. You'll see a tool icon when it accesses your data.
+1. Open **Cursor → Settings → MCP → Add Server**
+2. Use command: `nocfo mcp` (or `uvx nocfo-cli mcp`)
+3. Add env var `NOCFO_API_TOKEN=<your_token>`
+4. Save and test with a simple prompt like "List my businesses"
 
 ---
 
-## Set Up with Cursor
-
-Add the same config to Cursor's MCP settings (**Settings → MCP → Add Server**) using `nocfo mcp` as the stdio command and pass the token via the `NOCFO_API_TOKEN` env variable.
-
-## MCP Server (advanced)
-
-Start the MCP server manually from the terminal:
+## CLI Quick Examples
 
 ```bash
-nocfo mcp
+nocfo user me
+nocfo businesses list
+nocfo invoices list --business <business_slug>
+nocfo reports balance-sheet --business <business_slug> --date-to 2026-12-31
 ```
 
-The server uses stdio transport. Any MCP-compatible client can connect to it.
+JSON output:
+
+```bash
+nocfo --output json businesses list
+```
+
+## Advanced / Technical
+
+### MCP server modes
+
+- `nocfo mcp` = local stdio mode
+- `nocfo mcp --transport http --auth-mode oauth --mcp-base-url mcp.nocfo.io` = remote HTTP mode
+
+Detailed auth contract and troubleshooting are in `MCP_AUTHENTICATION.md`.
+
+### Auth precedence
+
+| Priority | Source                            |
+| -------- | --------------------------------- |
+| 1        | `--api-token` CLI flag            |
+| 2        | `NOCFO_API_TOKEN` env var         |
+| 3        | `~/.config/nocfo-cli/config.json` |
+
+Default base URL: `https://api-prd.nocfo.io`
+Default output format: `table`
 
 ## CLI Command Groups
 
