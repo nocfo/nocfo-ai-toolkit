@@ -1,0 +1,66 @@
+name: Deploy version
+
+on:
+  workflow_dispatch:
+    inputs:
+      env:
+        type: choice
+        description: "Environment to deploy"
+        required: true
+        default: tst
+        options:
+          - tst
+          - prd
+
+jobs:
+  deploy_tst:
+    if: github.event.inputs.env == 'tst'
+
+    name: "Deploy Testing"
+    runs-on: ubuntu-latest
+    environment: Testing
+
+    steps:
+      - name: Checkout repository to main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Setup AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: eu-west-1
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
+
+      - name: Install dependencies
+        run: pip install -r scripts/deploy_requirements.txt
+
+      - name: Deploy Testing
+        run: python scripts/deploy.py nocfo-tst-mcp-pipeline ${{ github.event.ref }}
+
+  deploy_prd:
+    if: github.event.inputs.env == 'prd'
+
+    name: "Deploy Production"
+    runs-on: ubuntu-latest
+    environment: Production
+
+    steps:
+      - name: Checkout repository to main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Setup AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: eu-west-1
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
+
+      - name: Install dependencies
+        run: pip install -r scripts/deploy_requirements.txt
+
+      - name: Deploy Production
+        run: python scripts/deploy.py nocfo-prd-mcp-pipeline ${{ github.event.ref }}
