@@ -40,6 +40,11 @@ def main_callback(
     env_file: str | None = typer.Option(
         None, help="Optional path to .env file for local development."
     ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Print mutating API requests without sending them.",
+    ),
 ) -> None:
     """Initialize global command context."""
 
@@ -49,7 +54,7 @@ def main_callback(
         output_format=output.value if output else None,
         env_file=env_file,
     )
-    ctx.obj = CommandContext(config=config)
+    ctx.obj = CommandContext(config=config, dry_run=dry_run)
 
 
 @app.command("mcp")

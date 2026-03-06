@@ -17,6 +17,7 @@ class CommandContext:
     """Shared context for CLI commands."""
 
     config: ToolkitConfig
+    dry_run: bool = False
 
     def require_token(self) -> str:
         if not self.config.api_token:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 import typer
@@ -10,6 +11,11 @@ import typer
 from nocfo_toolkit.api_client import NocfoApiError
 from nocfo_toolkit.cli.context import CommandContext
 from nocfo_toolkit.cli.output import print_data, print_error
+
+_CONTROL_CHARS_PATTERN = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]")
+_SAFE_QUERY_KEY_PATTERN = re.compile(r"^[A-Za-z0-9_.:-]+$")
+_MAX_JSON_BODY_CHARS = 200_000
+_READ_ONLY_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 
 def parse_key_value_pairs(pairs: list[str] | None) -> dict[str, Any]:
@@ -20,7 +26,16 @@ def parse_key_value_pairs(pairs: list[str] | None) -> dict[str, Any]:
         if "=" not in pair:
             raise typer.BadParameter(f"Expected key=value pair, got '{pair}'.")
         key, raw = pair.split("=", 1)
-        parsed[key] = _coerce_value(raw)
+        key = key.strip()
+        if not key:
+            raise typer.BadParameter("Query key cannot be empty.")
+        if not _SAFE_QUERY_KEY_PATTERN.match(key):
+            raise typer.BadParameter(
+                f"Invalid query key '{key}'. Allowed characters: letters, numbers, _, ., :, -"
+            )
+        value = _coerce_value(raw)
+        _assert_safe_string(value, context=f"query value '{key}'")
+        parsed[key] = value
     return parsed
 
 
@@ -33,6 +48,11 @@ def merge_body(
 
     body: dict[str, Any] = {}
     if json_input:
+        if len(json_input) > _MAX_JSON_BODY_CHARS:
+            raise typer.BadParameter(
+                f"--json-body is too large (max {_MAX_JSON_BODY_CHARS} characters)."
+            )
+        _assert_safe_string(json_input, context="--json-body")
         try:
             loaded = json.loads(json_input)
         except json.JSONDecodeError as exc:
@@ -41,6 +61,7 @@ def merge_body(
             raise typer.BadParameter("--json-body must decode to an object.")
         body.update(loaded)
     body.update(parse_key_value_pairs(field_pairs))
+    _assert_safe_payload(body, context="request body")
     return body
 
 
@@ -73,9 +94,28 @@ async def run_request(
 ) -> None:
     """Execute request command and print output."""
 
+    normalized_method = method.upper()
+    if command_ctx.dry_run and normalized_method not in _READ_ONLY_METHODS:
+        print_data(
+            {
+                "dry_run": True,
+                "method": normalized_method,
+                "path": path,
+                "params": params or {},
+                "body": body or {},
+            },
+            command_ctx.config.output_format,
+        )
+        return
+
     client = command_ctx.api_client()
     try:
-        result = await client.request(method, path, params=params, json_body=body)
+        result = await client.request(
+            normalized_method,
+            path,
+            params=params,
+            json_body=body,
+        )
         if result is not None:
             print_data(result, command_ctx.config.output_format)
     except NocfoApiError as exc:
@@ -97,3 +137,24 @@ def _coerce_value(value: str) -> Any:
         return int(raw)
     except ValueError:
         return raw
+
+
+def _assert_safe_payload(value: Any, *, context: str) -> None:
+    if isinstance(value, str):
+        _assert_safe_string(value, context=context)
+        return
+    if isinstance(value, dict):
+        for nested_key, nested_value in value.items():
+            _assert_safe_string(str(nested_key), context=f"{context} key")
+            _assert_safe_payload(nested_value, context=f"{context}.{nested_key}")
+        return
+    if isinstance(value, list):
+        for index, nested_value in enumerate(value):
+            _assert_safe_payload(nested_value, context=f"{context}[{index}]")
+
+
+def _assert_safe_string(value: Any, *, context: str) -> None:
+    if not isinstance(value, str):
+        return
+    if _CONTROL_CHARS_PATTERN.search(value):
+        raise typer.BadParameter(f"Control characters are not allowed in {context}.")
