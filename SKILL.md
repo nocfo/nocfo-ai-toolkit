@@ -1,13 +1,13 @@
 ---
 name: nocfo
-description: Use NoCFO CLI for bookkeeping, invoicing, and business data operations. Use when the user wants to query or update NoCFO data from an agent through terminal commands.
+description: Use NoCFO CLI for bookkeeping, invoicing, reporting, and schema introspection. Use when the user wants to query or update NoCFO data from an agent through terminal commands.
 ---
 
 # NoCFO CLI Skill
 
 ## Purpose
 
-This skill helps an agent use the `nocfo` terminal client efficiently for NoCFO API operations.
+This skill helps an agent use the `nocfo` terminal client efficiently and safely for NoCFO API operations.
 
 ## Prerequisites
 
@@ -24,11 +24,26 @@ Environment variables:
 - `NOCFO_BASE_URL` (default `https://api-prd.nocfo.io`)
 - `NOCFO_OUTPUT_FORMAT` (`table` or `json`)
 
+## Agent Operating Defaults
+
+Use these defaults unless the user asks otherwise:
+
+1. Always prefer machine-readable output:
+   - `--output json`
+2. For mutating operations, run dry-run first:
+   - `--dry-run`
+3. Prefer raw JSON payloads for complex input:
+   - `--json-body '{"...": "..."}'`
+4. Use schema introspection before uncertain writes:
+   - `nocfo schema list`
+   - `nocfo schema show <query>`
+
 ## Command Structure
 
 Pattern:
 
 - `nocfo <group> <action> [options]`
+- Global options: `--output`, `--env-file`, `--base-url`, `--api-token`, `--dry-run`
 
 Main groups:
 
@@ -43,7 +58,8 @@ Main groups:
 - `files`
 - `tags`
 - `user`
-- `mcp`
+- `reports`
+- `schema`
 
 ## Common Workflows
 
@@ -69,6 +85,13 @@ nocfo contacts create --business my-business --field name=Example --field is_inv
 nocfo products update 123 --business my-business --field name=UpdatedName --partial
 ```
 
+Agent-safe mutation pattern:
+
+```bash
+nocfo --output json --dry-run products update 123 --business my-business --json-body '{"name":"UpdatedName"}' --partial
+nocfo --output json products update 123 --business my-business --json-body '{"name":"UpdatedName"}' --partial
+```
+
 ### 4) Document and account operations
 
 ```bash
@@ -82,32 +105,29 @@ nocfo accounts get 1910 --business my-business
 nocfo files upload ./invoice.pdf --business my-business
 ```
 
+### 6) Accounting reports (JSON)
+
+```bash
+nocfo reports balance-sheet --business my-business --date-at 2026-12-31 --extend-accounts
+nocfo reports income-statement --business my-business --date-from 2026-01-01 --date-to 2026-12-31
+nocfo reports ledger --business my-business --date-from 2026-01-01 --date-to 2026-01-31
+nocfo reports journal --business my-business --date-from 2026-01-01 --date-to 2026-01-31
+nocfo reports vat --business my-business --date-from 2026-01-01 --date-to 2026-01-31
+```
+
+### 7) Schema introspection
+
+```bash
+nocfo schema list
+nocfo schema list --all
+nocfo schema show report/json
+nocfo schema show "Reports - Generate JSON Report"
+```
+
 ## Error Handling
 
 - If command fails with auth errors, run `nocfo auth status` and refresh token.
 - If endpoint or payload fails, retry with `--output json` to inspect exact response.
 - Prefer idempotent reads first (`list`, `get`) before writes (`create`, `update`, `delete`).
-
-## MCP Usage
-
-To run local MCP server for Claude/Cursor integration:
-
-```bash
-nocfo mcp
-```
-
-Example Claude Desktop server config:
-
-```json
-{
-  "mcpServers": {
-    "nocfo": {
-      "command": "uvx",
-      "args": ["nocfo-cli", "mcp"],
-      "env": {
-        "NOCFO_API_TOKEN": "your-token"
-      }
-    }
-  }
-}
-```
+- If payload validation fails, switch from `--field` pairs to `--json-body`.
+- If write shape is unclear, inspect with `nocfo schema show <query>` before retrying.
