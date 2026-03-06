@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+from typing import Literal
+
 import typer
 
 from nocfo_toolkit.cli.commands import (
@@ -58,13 +61,89 @@ def main_callback(
 
 
 @app.command("mcp")
-def run_mcp_server(ctx: typer.Context) -> None:
-    """Run NoCFO MCP server over stdio."""
+def run_mcp_server(
+    ctx: typer.Context,
+    transport: str = typer.Option(
+        "stdio",
+        "--transport",
+        help="MCP transport: stdio for local, http for remote connectors.",
+    ),
+    host: str = typer.Option(
+        "0.0.0.0",  # nosec: B104
+        "--host",
+        help="Host to bind HTTP transport.",
+    ),
+    port: int = typer.Option(
+        8000,
+        "--port",
+        min=1,
+        max=65535,
+        help="Port to bind HTTP transport.",
+    ),
+    path: str = typer.Option(
+        "/mcp",
+        "--path",
+        help="HTTP path for streamable MCP endpoint.",
+    ),
+    auth_mode: str = typer.Option(
+        "pat",
+        "--auth-mode",
+        help="Server auth mode: pat (legacy) or oauth (Claude/OpenAI remote).",
+    ),
+    mcp_base_url: str | None = typer.Option(
+        None,
+        "--mcp-base-url",
+        help=(
+            "Public base URL for oauth mode (e.g. https://mcp.nocfo.io). "
+            "Can also be set via NOCFO_MCP_BASE_URL."
+        ),
+    ),
+    required_scopes: str = typer.Option(
+        "",
+        "--required-scopes",
+        help="Comma-separated OAuth scopes required for MCP tools.",
+    ),
+) -> None:
+    """Run NoCFO MCP server over stdio or HTTP transport."""
 
-    from nocfo_toolkit.mcp.server import run_server
+    from nocfo_toolkit.mcp.server import MCPServerOptions, run_http_server, run_server
 
     command_ctx = get_context(ctx)
-    run_server(command_ctx.config)
+    auth_mode_normalized = auth_mode.strip().lower()
+    if auth_mode_normalized not in {"pat", "oauth"}:
+        raise typer.BadParameter("--auth-mode must be either 'pat' or 'oauth'.")
+
+    transport_normalized = transport.strip().lower()
+    if transport_normalized not in {"stdio", "http"}:
+        raise typer.BadParameter("--transport must be either 'stdio' or 'http'.")
+    if auth_mode_normalized == "oauth" and transport_normalized != "http":
+        raise typer.BadParameter(
+            "OAuth mode requires --transport http because remote connectors use HTTP."
+        )
+
+    scope_items = tuple(
+        value.strip() for value in required_scopes.split(",") if value.strip()
+    )
+    auth_mode_value: Literal["pat", "oauth"] = (
+        "oauth" if auth_mode_normalized == "oauth" else "pat"
+    )
+    options = MCPServerOptions(
+        auth_mode=auth_mode_value,
+        mcp_base_url=mcp_base_url or os.getenv("NOCFO_MCP_BASE_URL"),
+        required_scopes=scope_items,
+    )
+
+    if transport_normalized == "http":
+        run_http_server(
+            command_ctx.config,
+            host=host,
+            port=port,
+            path=path,
+            options=options,
+        )
+        return
+
+    run_server(command_ctx.config, options=options)
 
 
 def main() -> None:
