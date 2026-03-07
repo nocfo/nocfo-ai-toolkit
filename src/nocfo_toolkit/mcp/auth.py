@@ -16,6 +16,8 @@ from fastmcp.server.auth.providers.introspection import IntrospectionTokenVerifi
 from fastmcp.server.auth.providers.jwt import JWTVerifier
 from fastmcp.server.dependencies import get_access_token
 from fastmcp.tools.tool import Tool
+from starlette.responses import JSONResponse
+from starlette.routing import Route
 
 from nocfo_toolkit.config import AUTH_HEADER_SCHEME, ToolkitConfig
 
@@ -239,11 +241,50 @@ class JwtExchangeAuth(httpx.Auth):
         yield request
 
 
+class _CleanUrlAuthProvider(RemoteAuthProvider):
+    """RemoteAuthProvider that strips Pydantic AnyHttpUrl trailing slashes.
+
+    Pydantic v2 normalises bare-host URLs (``https://host`` →
+    ``https://host/``).  MCP clients concatenate this with
+    ``/.well-known/…`` paths, producing double-slash URLs that 404 on
+    most identity providers.  This subclass wraps the protected-resource
+    metadata route so the serialised JSON contains slash-free URLs.
+    """
+
+    def get_routes(self, mcp_path: str | None = None) -> list[Route]:
+        routes = super().get_routes(mcp_path)
+        return [self._clean_metadata_route(r) for r in routes]
+
+    @staticmethod
+    def _clean_metadata_route(route: Route) -> Route:
+        if "oauth-protected-resource" not in (route.path or ""):
+            return route
+
+        original = route.endpoint
+
+        async def _strip_trailing_slashes(request):  # type: ignore[no-untyped-def]
+            response = await original(request)
+            body = json.loads(response.body)
+            for key in ("resource", "authorization_servers"):
+                val = body.get(key)
+                if isinstance(val, str):
+                    body[key] = val.rstrip("/")
+                elif isinstance(val, list):
+                    body[key] = [
+                        v.rstrip("/") if isinstance(v, str) else v for v in val
+                    ]
+            return JSONResponse(body, headers=dict(response.headers))
+
+        return Route(
+            route.path, endpoint=_strip_trailing_slashes, methods=route.methods
+        )
+
+
 def build_remote_auth_provider(
     *,
     config: ToolkitConfig,
     options: MCPAuthOptions,
-) -> RemoteAuthProvider:
+) -> _CleanUrlAuthProvider:
     """Create a FastMCP RemoteAuthProvider for connector OAuth bearer verification."""
 
     if options.mode != "oauth":
@@ -258,10 +299,9 @@ def build_remote_auth_provider(
 
     remote = RemoteOAuthConfig.from_env(config)
     verifier = remote.build_verifier()
-    auth_servers = [s.rstrip("/") for s in remote.authorization_servers]
-    return RemoteAuthProvider(
+    return _CleanUrlAuthProvider(
         token_verifier=verifier,
-        authorization_servers=auth_servers,
+        authorization_servers=list(remote.authorization_servers),
         base_url=options.mcp_base_url,
         scopes_supported=list(options.required_scopes or remote.required_scopes),
         resource_name="NoCFO MCP",
