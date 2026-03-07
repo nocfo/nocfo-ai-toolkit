@@ -4,18 +4,22 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Sequence
 from typing import Any
 
 import typer
 
+from rich.text import Text
+
 from nocfo_toolkit.api_client import NocfoApiError
 from nocfo_toolkit.cli.context import CommandContext
-from nocfo_toolkit.cli.output import print_data, print_error
+from nocfo_toolkit.cli.output import console, print_data, print_error
 
 _CONTROL_CHARS_PATTERN = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]")
 _SAFE_QUERY_KEY_PATTERN = re.compile(r"^[A-Za-z0-9_.:-]+$")
 _MAX_JSON_BODY_CHARS = 200_000
 _READ_ONLY_METHODS = {"GET", "HEAD", "OPTIONS"}
+_DEFAULT_PAGE_SIZE = 20
 
 
 def parse_key_value_pairs(pairs: list[str] | None) -> dict[str, Any]:
@@ -70,13 +74,40 @@ async def run_list(
     *,
     path: str,
     params: dict[str, Any] | None = None,
+    columns: Sequence[str] | None = None,
+    page_size: int = _DEFAULT_PAGE_SIZE,
+    fetch_all: bool = False,
 ) -> None:
     """Execute list command and print output."""
 
     client = command_ctx.api_client()
     try:
-        results = await client.list_paginated(path, params=params)
-        print_data(results, command_ctx.config.output_format)
+        if fetch_all:
+            results = await client.list_paginated(path, params=params)
+            print_data(results, command_ctx.config.output_format, columns=columns)
+            return
+
+        query = dict(params or {})
+        query.setdefault("page_size", page_size)
+        query.setdefault("page", 1)
+        page_data = await client.request("GET", path, params=query)
+
+        if isinstance(page_data, dict) and "results" in page_data:
+            results = page_data.get("results") or []
+            count = page_data.get("count", len(results))
+            print_data(results, command_ctx.config.output_format, columns=columns)
+            if page_data.get("next"):
+                console.print(
+                    Text(
+                        f"Showing {len(results)} of {count} results. "
+                        "Use --all to fetch everything or --limit N to adjust.",
+                        style="dim",
+                    )
+                )
+        elif isinstance(page_data, list):
+            print_data(page_data, command_ctx.config.output_format, columns=columns)
+        else:
+            raise NocfoApiError("Expected list or paginated object response.")
     except NocfoApiError as exc:
         print_error(str(exc))
         raise typer.Exit(code=1) from exc

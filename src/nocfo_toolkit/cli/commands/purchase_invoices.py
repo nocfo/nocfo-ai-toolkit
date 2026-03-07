@@ -14,12 +14,16 @@ from nocfo_toolkit.cli.commands._helpers import (
 
 app = typer.Typer(help="Manage purchase invoices.")
 
+_LIST_COLUMNS = ("id", "sender_name", "invoicing_date", "amount", "is_paid")
+
 
 @app.command("list")
 def list_purchase_invoices(
     ctx: typer.Context,
     business: str = typer.Option(..., "--business"),
     query: list[str] = typer.Option(None, "--query"),
+    limit: int = typer.Option(20, "--limit", "-n", help="Max results per page."),
+    all_pages: bool = typer.Option(False, "--all", help="Fetch all pages."),
 ) -> None:
     command_ctx = get_context(ctx)
     run_async(
@@ -27,6 +31,9 @@ def list_purchase_invoices(
             command_ctx,
             path=f"/v1/invoicing/{business}/purchase_invoice/",
             params=parse_key_value_pairs(query),
+            columns=_LIST_COLUMNS,
+            page_size=limit,
+            fetch_all=all_pages,
         )
     )
 

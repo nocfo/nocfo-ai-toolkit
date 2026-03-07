@@ -15,14 +15,28 @@ from nocfo_toolkit.cli.commands._helpers import (
 app = typer.Typer(help="Manage businesses.")
 
 
+_LIST_COLUMNS = ("slug", "name", "country", "created_at")
+
+
 @app.command("list")
 def list_businesses(
     ctx: typer.Context,
     query: list[str] = typer.Option(None, "--query", help="Filters as key=value."),
+    limit: int = typer.Option(20, "--limit", "-n", help="Max results per page."),
+    all_pages: bool = typer.Option(False, "--all", help="Fetch all pages."),
 ) -> None:
     command_ctx = get_context(ctx)
     params = parse_key_value_pairs(query)
-    run_async(run_list(command_ctx, path="/v1/business/", params=params))
+    run_async(
+        run_list(
+            command_ctx,
+            path="/v1/business/",
+            params=params,
+            columns=_LIST_COLUMNS,
+            page_size=limit,
+            fetch_all=all_pages,
+        )
+    )
 
 
 @app.command("get")

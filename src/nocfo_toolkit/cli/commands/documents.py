@@ -14,12 +14,16 @@ from nocfo_toolkit.cli.commands._helpers import (
 
 app = typer.Typer(help="Manage bookkeeping documents.")
 
+_LIST_COLUMNS = ("id", "number", "date", "description", "balance")
+
 
 @app.command("list")
 def list_documents(
     ctx: typer.Context,
     business: str = typer.Option(..., "--business"),
     query: list[str] = typer.Option(None, "--query"),
+    limit: int = typer.Option(20, "--limit", "-n", help="Max results per page."),
+    all_pages: bool = typer.Option(False, "--all", help="Fetch all pages."),
 ) -> None:
     command_ctx = get_context(ctx)
     run_async(
@@ -27,6 +31,9 @@ def list_documents(
             command_ctx,
             path=f"/v1/business/{business}/document/",
             params=parse_key_value_pairs(query),
+            columns=_LIST_COLUMNS,
+            page_size=limit,
+            fetch_all=all_pages,
         )
     )
 
