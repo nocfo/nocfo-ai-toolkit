@@ -258,9 +258,10 @@ def build_remote_auth_provider(
 
     remote = RemoteOAuthConfig.from_env(config)
     verifier = remote.build_verifier()
+    auth_servers = [s.rstrip("/") for s in remote.authorization_servers]
     return RemoteAuthProvider(
         token_verifier=verifier,
-        authorization_servers=list(remote.authorization_servers),
+        authorization_servers=auth_servers,
         base_url=options.mcp_base_url,
         scopes_supported=list(options.required_scopes or remote.required_scopes),
         resource_name="NoCFO MCP",
