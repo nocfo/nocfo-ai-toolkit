@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -17,25 +18,34 @@ def load_openapi_spec(
     openapi_path: str = "/openapi/",
     cache_path: Path | None = None,
     timeout: float = 30.0,
+    max_attempts: int = 6,
+    retry_delay_seconds: float = 2.0,
 ) -> dict[str, Any]:
-    """Load OpenAPI spec from API with local cache fallback."""
+    """Load OpenAPI spec from API with retry and local cache fallback."""
 
     cache = cache_path or CACHE_PATH
     url = f"{base_url.rstrip('/')}/{openapi_path.strip('/')}/"
+    last_error: Exception | None = None
 
-    try:
-        response = httpx.get(url, timeout=timeout)
-        response.raise_for_status()
-        spec = response.json()
-        _write_cache(cache, spec)
-        return spec
-    except (httpx.HTTPError, ValueError):
-        cached = _read_cache(cache)
-        if cached is not None:
-            return cached
-        raise RuntimeError(
-            "Failed to load OpenAPI spec from network and no local cache exists."
-        )
+    for attempt in range(1, max_attempts + 1):
+        try:
+            response = httpx.get(url, timeout=timeout)
+            response.raise_for_status()
+            spec = response.json()
+            _write_cache(cache, spec)
+            return spec
+        except (httpx.HTTPError, ValueError) as exc:
+            last_error = exc
+            if attempt < max_attempts:
+                time.sleep(retry_delay_seconds)
+
+    cached = _read_cache(cache)
+    if cached is not None:
+        return cached
+
+    raise RuntimeError(
+        "Failed to load OpenAPI spec from network after retries and no local cache exists."
+    ) from last_error
 
 
 def filter_mcp_spec(spec: dict[str, Any], mcp_tag: str = "MCP") -> dict[str, Any]:
