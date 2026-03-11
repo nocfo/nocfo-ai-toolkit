@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import inspect
 import json
 import os
 import time
@@ -11,7 +12,7 @@ from dataclasses import dataclass
 from typing import Any, Literal, cast
 
 import httpx
-from fastmcp.server.auth import RemoteAuthProvider
+from fastmcp.server.auth import AccessToken, RemoteAuthProvider, TokenVerifier
 from fastmcp.server.auth.providers.introspection import IntrospectionTokenVerifier
 from fastmcp.server.auth.providers.jwt import JWTVerifier
 from fastmcp.server.dependencies import get_access_token
@@ -56,7 +57,7 @@ class RemoteOAuthConfig:
     """OAuth verifier + metadata configuration for remote MCP auth."""
 
     authorization_servers: tuple[str, ...]
-    verifier_mode: Literal["jwt", "introspection"]
+    verifier_mode: Literal["jwt", "introspection", "userinfo"]
     jwt_jwks_uri: str | None
     jwt_issuer: str | None
     jwt_audience: tuple[str, ...]
@@ -66,14 +67,16 @@ class RemoteOAuthConfig:
     introspection_client_auth_method: Literal[
         "client_secret_basic", "client_secret_post"
     ]
+    userinfo_url: str | None
     required_scopes: tuple[str, ...]
 
     @classmethod
     def from_env(cls, config: ToolkitConfig) -> RemoteOAuthConfig:
         verifier_mode = (_env("NOCFO_MCP_TOKEN_VERIFIER") or "jwt").lower()
-        if verifier_mode not in {"jwt", "introspection"}:
+        if verifier_mode not in {"jwt", "introspection", "userinfo"}:
             raise MCPAuthConfigurationError(
-                "NOCFO_MCP_TOKEN_VERIFIER must be 'jwt' or 'introspection'."
+                "NOCFO_MCP_TOKEN_VERIFIER must be 'jwt', 'introspection', or "
+                "'userinfo'."
             )
 
         authorization_servers = tuple(
@@ -84,7 +87,7 @@ class RemoteOAuthConfig:
         jwt_audience = tuple(_split_csv(_env("NOCFO_MCP_JWT_AUDIENCE")))
 
         verifier_mode_typed = cast(
-            Literal["jwt", "introspection"],
+            Literal["jwt", "introspection", "userinfo"],
             verifier_mode,
         )
         introspection_client_auth_method = (
@@ -111,6 +114,8 @@ class RemoteOAuthConfig:
                 Literal["client_secret_basic", "client_secret_post"],
                 introspection_client_auth_method,
             ),
+            userinfo_url=_env("NOCFO_MCP_USERINFO_URL")
+            or f"{config.base_url.rstrip('/')}/identity/o/api/userinfo",
             required_scopes=required_scopes,
         )
 
@@ -124,6 +129,16 @@ class RemoteOAuthConfig:
                 jwks_uri=self.jwt_jwks_uri,
                 issuer=self.jwt_issuer,
                 audience=list(self.jwt_audience) if self.jwt_audience else None,
+                required_scopes=list(self.required_scopes) or None,
+            )
+
+        if self.verifier_mode == "userinfo":
+            if not self.userinfo_url:
+                raise MCPAuthConfigurationError(
+                    "Missing NOCFO_MCP_USERINFO_URL for userinfo verifier mode."
+                )
+            return UserInfoTokenVerifier(
+                userinfo_url=self.userinfo_url,
                 required_scopes=list(self.required_scopes) or None,
             )
 
@@ -144,6 +159,55 @@ class RemoteOAuthConfig:
             client_auth_method=self.introspection_client_auth_method,
             required_scopes=list(self.required_scopes) or None,
             cache_ttl_seconds=30,
+        )
+
+
+class UserInfoTokenVerifier(TokenVerifier):
+    """Validate opaque OAuth access tokens via OIDC userinfo endpoint."""
+
+    def __init__(
+        self, *, userinfo_url: str, required_scopes: list[str] | None = None
+    ) -> None:
+        super().__init__(required_scopes=required_scopes)
+        self._userinfo_url = userinfo_url
+
+    async def verify_token(self, token: str) -> AccessToken | None:
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                response = await client.get(
+                    self._userinfo_url,
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "Accept": "application/json",
+                    },
+                )
+        except httpx.HTTPError:
+            return None
+
+        if response.status_code != 200:
+            return None
+
+        payload = response.json() if response.content else {}
+        if not isinstance(payload, dict):
+            return None
+
+        # allauth returns opaque access tokens; if scopes are not explicitly
+        # included in userinfo payload, treat configured required scopes as granted.
+        scope_value = payload.get("scope")
+        scopes = (
+            [s for s in scope_value.split(" ") if s]
+            if isinstance(scope_value, str) and scope_value.strip()
+            else list(self.required_scopes or [])
+        )
+        if self.required_scopes and not set(self.required_scopes).issubset(set(scopes)):
+            return None
+
+        client_id = payload.get("azp") or payload.get("client_id") or "nocfo-userinfo"
+        return AccessToken(
+            token=token,
+            client_id=str(client_id),
+            scopes=scopes,
+            claims=payload,
         )
 
 
@@ -261,6 +325,13 @@ class _CleanUrlAuthProvider(RemoteAuthProvider):
             return route
 
         original = route.endpoint
+        # Some Starlette routes wrap endpoints as ASGI callables
+        # (scope, receive, send). Only wrap request-style endpoints.
+        try:
+            if len(inspect.signature(original).parameters) != 1:
+                return route
+        except (TypeError, ValueError):
+            return route
 
         async def _strip_trailing_slashes(request):  # type: ignore[no-untyped-def]
             response = await original(request)
