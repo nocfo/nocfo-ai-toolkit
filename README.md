@@ -92,7 +92,7 @@ Open Claude Desktop config and add:
   "mcpServers": {
     "nocfo": {
       "command": "uvx",
-      "args": ["nocfo-cli", "mcp"],
+      "args": ["--from", "nocfo-cli", "nocfo", "mcp"],
       "env": {
         "NOCFO_API_TOKEN": "your_token_here"
       }
@@ -115,10 +115,23 @@ Then restart Claude Desktop.
 
 ## Local Setup (Cursor)
 
-1. Open **Cursor → Settings → MCP → Add Server**
-2. Use command: `nocfo mcp` (or `uvx nocfo-cli mcp`)
-3. Add env var `NOCFO_API_TOKEN=<your_token>`
-4. Save and test with a simple prompt like "List my businesses"
+Add the following to your Cursor MCP config (`~/.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "nocfo": {
+      "command": "uvx",
+      "args": ["--from", "nocfo-cli", "nocfo", "mcp"],
+      "env": {
+        "NOCFO_API_TOKEN": "your_token_here"
+      }
+    }
+  }
+}
+```
+
+Then test with a simple prompt like "List my businesses".
 
 ---
 
@@ -128,7 +141,14 @@ Then restart Claude Desktop.
 nocfo user me
 nocfo businesses list
 nocfo invoices list --business <business_slug>
-nocfo reports balance-sheet --business <business_slug> --date-to 2026-12-31
+nocfo reports balance-sheet --business <business_slug> --date-at 2026-12-31
+nocfo reports balance-sheet-short --business <business_slug> --date-at 2026-12-31
+nocfo reports income-statement --business <business_slug> --date-from 2026-01-01 --date-to 2026-12-31
+nocfo reports income-statement-short --business <business_slug> --date-from 2026-01-01 --date-to 2026-12-31
+nocfo reports ledger --business <business_slug> --date-from 2026-01-01 --date-to 2026-01-31
+nocfo reports journal --business <business_slug> --date-from 2026-01-01 --date-to 2026-01-31
+nocfo reports vat --business <business_slug> --date-from 2026-01-01 --date-to 2026-01-31
+nocfo reports equity-changes --business <business_slug> --date-at 2026-12-31
 ```
 
 JSON output:
