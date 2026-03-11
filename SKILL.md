@@ -109,10 +109,13 @@ nocfo files upload ./invoice.pdf --business my-business
 
 ```bash
 nocfo reports balance-sheet --business my-business --date-at 2026-12-31 --extend-accounts
+nocfo reports balance-sheet-short --business my-business --date-at 2026-12-31 --extend-accounts
 nocfo reports income-statement --business my-business --date-from 2026-01-01 --date-to 2026-12-31
+nocfo reports income-statement-short --business my-business --date-from 2026-01-01 --date-to 2026-12-31
 nocfo reports ledger --business my-business --date-from 2026-01-01 --date-to 2026-01-31
 nocfo reports journal --business my-business --date-from 2026-01-01 --date-to 2026-01-31
 nocfo reports vat --business my-business --date-from 2026-01-01 --date-to 2026-01-31
+nocfo reports equity-changes --business my-business --date-at 2026-12-31
 ```
 
 ### 7) Schema introspection

@@ -26,7 +26,7 @@ def print_data(
     """Render data as JSON or a table-like output."""
 
     if output_format == OutputFormat.JSON:
-        console.print_json(data=json.dumps(data, default=str))
+        console.print_json(json=json.dumps(data, default=str))
         return
 
     if isinstance(data, list):
