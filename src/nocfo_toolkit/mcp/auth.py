@@ -315,9 +315,61 @@ class _CleanUrlAuthProvider(RemoteAuthProvider):
     metadata route so the serialised JSON contains slash-free URLs.
     """
 
+    def __init__(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+        authorization_servers = kwargs.get("authorization_servers") or []
+        self._authorization_servers = [str(url) for url in authorization_servers]
+        super().__init__(*args, **kwargs)
+
     def get_routes(self, mcp_path: str | None = None) -> list[Route]:
         routes = super().get_routes(mcp_path)
-        return [self._clean_metadata_route(r) for r in routes]
+        cleaned_routes = [self._clean_metadata_route(r) for r in routes]
+        if not any(
+            "oauth-authorization-server" in (route.path or "")
+            for route in cleaned_routes
+        ):
+            cleaned_routes.append(
+                Route(
+                    "/.well-known/oauth-authorization-server",
+                    endpoint=self._authorization_server_metadata,
+                    methods=["GET", "HEAD"],
+                )
+            )
+        return cleaned_routes
+
+    async def _authorization_server_metadata(self, request):  # type: ignore[no-untyped-def]
+        del request
+        if not self._authorization_servers:
+            return JSONResponse(
+                {"error": "authorization_server_unavailable"}, status_code=503
+            )
+        target = (
+            f"{self._authorization_servers[0].rstrip('/')}"
+            "/.well-known/oauth-authorization-server"
+        )
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                response = await client.get(
+                    target,
+                    headers={"Accept": "application/json"},
+                )
+        except httpx.HTTPError:
+            return JSONResponse(
+                {"error": "authorization_server_unavailable"}, status_code=503
+            )
+
+        if response.status_code != 200:
+            return JSONResponse(
+                {"error": "authorization_server_unavailable"},
+                status_code=503,
+            )
+
+        payload = response.json() if response.content else {}
+        if not isinstance(payload, dict):
+            return JSONResponse(
+                {"error": "authorization_server_unavailable"},
+                status_code=503,
+            )
+        return JSONResponse(payload)
 
     @staticmethod
     def _clean_metadata_route(route: Route) -> Route:
@@ -325,30 +377,97 @@ class _CleanUrlAuthProvider(RemoteAuthProvider):
             return route
 
         original = route.endpoint
-        # Some Starlette routes wrap endpoints as ASGI callables
-        # (scope, receive, send). Only wrap request-style endpoints.
         try:
-            if len(inspect.signature(original).parameters) != 1:
-                return route
+            param_count = len(inspect.signature(original).parameters)
         except (TypeError, ValueError):
+            return route
+
+        if param_count == 3:
+            # FastMCP may expose the protected-resource endpoint as ASGI
+            # middleware (scope, receive, send). Intercept that response too.
+            async def _strip_trailing_slashes_asgi(scope, receive, send):  # type: ignore[no-untyped-def]
+                response_start: dict[str, Any] | None = None
+                body_chunks: list[bytes] = []
+
+                async def _capture_send(message):  # type: ignore[no-untyped-def]
+                    nonlocal response_start
+                    message_type = message.get("type")
+                    if message_type == "http.response.start":
+                        response_start = message
+                        return
+                    if message_type != "http.response.body":
+                        await send(message)
+                        return
+
+                    body_chunks.append(message.get("body", b""))
+                    if message.get("more_body", False):
+                        return
+
+                    body = b"".join(body_chunks)
+                    cleaned_body = _CleanUrlAuthProvider._clean_metadata_json_bytes(
+                        body
+                    )
+                    if response_start:
+                        headers = list(response_start.get("headers", []))
+                        headers = [
+                            header
+                            for header in headers
+                            if header[0].lower() != b"content-length"
+                        ]
+                        headers.append(
+                            (b"content-length", str(len(cleaned_body)).encode("ascii"))
+                        )
+                        await send({**response_start, "headers": headers})
+                    await send(
+                        {
+                            "type": "http.response.body",
+                            "body": cleaned_body,
+                            "more_body": False,
+                        }
+                    )
+
+                await original(scope, receive, _capture_send)
+
+            route.app = _strip_trailing_slashes_asgi
+            return route
+
+        if param_count != 1:
             return route
 
         async def _strip_trailing_slashes(request):  # type: ignore[no-untyped-def]
             response = await original(request)
-            body = json.loads(response.body)
-            for key in ("resource", "authorization_servers"):
-                val = body.get(key)
-                if isinstance(val, str):
-                    body[key] = val.rstrip("/")
-                elif isinstance(val, list):
-                    body[key] = [
-                        v.rstrip("/") if isinstance(v, str) else v for v in val
-                    ]
+            body = _CleanUrlAuthProvider._clean_metadata_dict(
+                json.loads(response.body) if response.body else {}
+            )
             return JSONResponse(body, headers=dict(response.headers))
 
         return Route(
             route.path, endpoint=_strip_trailing_slashes, methods=route.methods
         )
+
+    @staticmethod
+    def _clean_metadata_dict(payload: Any) -> dict[str, Any]:
+        if not isinstance(payload, dict):
+            return {}
+        body = dict(payload)
+        for key in ("resource", "authorization_servers"):
+            val = body.get(key)
+            if isinstance(val, str):
+                body[key] = val.rstrip("/")
+            elif isinstance(val, list):
+                body[key] = [v.rstrip("/") if isinstance(v, str) else v for v in val]
+        return body
+
+    @staticmethod
+    def _clean_metadata_json_bytes(body: bytes) -> bytes:
+        if not body:
+            return body
+        try:
+            parsed = json.loads(body)
+        except (TypeError, ValueError):
+            return body
+        cleaned = _CleanUrlAuthProvider._clean_metadata_dict(parsed)
+        return json.dumps(cleaned, separators=(",", ":")).encode("utf-8")
 
 
 def build_remote_auth_provider(

@@ -8,8 +8,13 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
+from starlette.routing import Route
 
-from nocfo_toolkit.mcp.auth import JwtExchangeAuth, MCPAuthConfigurationError
+from nocfo_toolkit.mcp.auth import (
+    JwtExchangeAuth,
+    MCPAuthConfigurationError,
+    _CleanUrlAuthProvider,
+)
 from nocfo_toolkit.mcp.server import MCPServerOptions, create_server
 from nocfo_toolkit.config import OutputFormat, TokenSource, ToolkitConfig
 
@@ -137,3 +142,50 @@ def test_create_server_oauth_mode_adds_tool_auth_metadata(monkeypatch) -> None:
     assert meta["mcp/www_authenticate"] == "Bearer"
     assert meta["securitySchemes"][0]["type"] == "oauth2"
     assert meta["securitySchemes"][0]["scopes"] == ["read"]
+
+
+def test_clean_metadata_route_strips_trailing_slashes_for_asgi_endpoints() -> None:
+    payload = {
+        "resource": "https://mcp-tst.nocfo.io/",
+        "authorization_servers": ["https://login-tst.nocfo.io/"],
+    }
+
+    async def asgi_endpoint(scope, receive, send):  # type: ignore[no-untyped-def]
+        body = json.dumps(payload).encode("utf-8")
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [(b"content-type", b"application/json")],
+            }
+        )
+        await send({"type": "http.response.body", "body": body, "more_body": False})
+
+    route = Route(
+        "/.well-known/oauth-protected-resource",
+        endpoint=asgi_endpoint,
+        methods=["GET"],
+    )
+    cleaned_route = _CleanUrlAuthProvider._clean_metadata_route(route)
+
+    sent_messages: list[dict[str, object]] = []
+
+    async def receive():  # type: ignore[no-untyped-def]
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message):  # type: ignore[no-untyped-def]
+        sent_messages.append(message)
+
+    asyncio.run(
+        cleaned_route.app(  # type: ignore[misc]
+            {"type": "http", "method": "GET", "path": route.path},
+            receive,
+            send,
+        )
+    )
+
+    assert len(sent_messages) == 2
+    assert sent_messages[0]["type"] == "http.response.start"
+    body = json.loads(sent_messages[1]["body"])  # type: ignore[index]
+    assert body["resource"] == "https://mcp-tst.nocfo.io"
+    assert body["authorization_servers"] == ["https://login-tst.nocfo.io"]
