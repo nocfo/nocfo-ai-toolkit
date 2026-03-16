@@ -279,6 +279,7 @@ class JwtExchangeAuth(httpx.Auth):
             )
 
             exchange_response = yield exchange_request
+            await exchange_response.aread()
             if exchange_response.status_code == 401:
                 raise RuntimeError(
                     "JWT exchange failed: incoming bearer token is missing or invalid."
