@@ -14,6 +14,14 @@ from nocfo_toolkit.mcp.http_error_capture import capture_http_error_response
 from nocfo_toolkit.mcp.middleware import MCPToolErrorMiddleware
 
 
+class _UnreadAsyncStream(httpx.AsyncByteStream):
+    async def __aiter__(self):
+        yield b'{"detail":"streamed failure"}'
+
+    async def aclose(self) -> None:
+        return None
+
+
 def test_normalize_http_error_supports_drf_detail_shape() -> None:
     payload = {"detail": "business_slug is required", "business_slug": ["required"]}
     normalized = normalize_http_error(
@@ -100,3 +108,12 @@ def test_middleware_keeps_non_http_tool_error() -> None:
 
     with pytest.raises(ToolError, match="Unexpected validation failure"):
         asyncio.run(middleware.on_call_tool(context, call_next))
+
+
+def test_capture_http_error_response_reads_unread_streaming_response() -> None:
+    request = httpx.Request("GET", "https://api.example.com/v1/businesses/")
+    response = httpx.Response(400, request=request, stream=_UnreadAsyncStream())
+
+    asyncio.run(capture_http_error_response(response))
+
+    assert response.json() == {"detail": "streamed failure"}
