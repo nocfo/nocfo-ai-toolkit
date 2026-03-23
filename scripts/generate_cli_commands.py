@@ -5,11 +5,15 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from pathlib import Path
 
 import httpx
 
 OPENAPI_URL = "https://api-prd.nocfo.io/openapi/"
+SRC_DIR = Path(__file__).resolve().parents[1] / "src"
+sys.path.insert(0, str(SRC_DIR))
+
 OUT_DIR = (
     Path(__file__).resolve().parents[1] / "src" / "nocfo_toolkit" / "cli" / "commands"
 )
@@ -22,16 +26,17 @@ def _to_snake_case(value: str) -> str:
 
 
 def _extract_groups(spec: dict) -> dict[str, list[tuple[str, str, str]]]:
+    from nocfo_toolkit.openapi import filter_mcp_spec
+
+    filtered_spec = filter_mcp_spec(spec, mcp_tag="MCP")
     groups: dict[str, list[tuple[str, str, str]]] = {}
-    for path, methods in spec.get("paths", {}).items():
+    for path, methods in filtered_spec.get("paths", {}).items():
         if not isinstance(methods, dict):
             continue
         for method, meta in methods.items():
             if method.upper() not in {"GET", "POST", "PATCH", "PUT", "DELETE"}:
                 continue
             tags = meta.get("tags", [])
-            if "MCP" not in tags:
-                continue
             group = _to_snake_case(tags[0] if tags else "general")
             operation_id = meta.get("operationId") or f"{method}_{path}"
             command_name = _to_snake_case(operation_id.split("__")[0])
