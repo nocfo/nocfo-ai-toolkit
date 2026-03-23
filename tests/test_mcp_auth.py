@@ -77,6 +77,43 @@ def test_jwt_exchange_auth_exchanges_once_and_uses_cache(monkeypatch) -> None:
     assert exchange_calls["count"] == 1
 
 
+def test_jwt_exchange_auth_dedupes_parallel_exchange(monkeypatch) -> None:
+    exchange_calls = {"count": 0}
+    expected_jwt = _build_unverified_jwt_with_exp(int(time.time()) + 3600)
+
+    def fake_access_token():
+        return SimpleNamespace(
+            token="incoming-bearer",
+            claims={"sub": "user-1"},
+        )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/auth/jwt/":
+            exchange_calls["count"] += 1
+            if exchange_calls["count"] > 1:
+                raise AssertionError("JWT exchange should be deduped across workers")
+            return httpx.Response(200, json={"token": expected_jwt})
+        assert request.headers["Authorization"] == f"Token {expected_jwt}"
+        return httpx.Response(200, json={"ok": True})
+
+    monkeypatch.setattr("nocfo_toolkit.mcp.auth.get_access_token", fake_access_token)
+    auth = JwtExchangeAuth()
+
+    async def run() -> None:
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(
+            base_url="https://api.example.com",
+            transport=transport,
+            auth=auth,
+        ) as client:
+            await asyncio.gather(
+                client.get("/v1/businesses/"), client.get("/v1/accounts/")
+            )
+
+    asyncio.run(run())
+    assert exchange_calls["count"] == 1
+
+
 def test_jwt_exchange_auth_requires_bearer(monkeypatch) -> None:
     monkeypatch.setattr("nocfo_toolkit.mcp.auth.get_access_token", lambda: None)
     auth = JwtExchangeAuth()
@@ -91,6 +128,37 @@ def test_jwt_exchange_auth_requires_bearer(monkeypatch) -> None:
             await client.get("/v1/businesses/")
 
     with pytest.raises(RuntimeError, match="Missing OAuth bearer token"):
+        asyncio.run(run())
+
+
+def test_jwt_exchange_auth_surfaces_exchange_error_detail(monkeypatch) -> None:
+    def fake_access_token():
+        return SimpleNamespace(
+            token="incoming-bearer",
+            claims={"sub": "user-1"},
+        )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/auth/jwt/":
+            return httpx.Response(401, json={"detail": "invalid_token"})
+        return httpx.Response(200, json={"ok": True})
+
+    monkeypatch.setattr("nocfo_toolkit.mcp.auth.get_access_token", fake_access_token)
+    auth = JwtExchangeAuth()
+
+    async def run() -> None:
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(
+            base_url="https://api.example.com",
+            transport=transport,
+            auth=auth,
+        ) as client:
+            await client.get("/v1/businesses/")
+
+    with pytest.raises(
+        RuntimeError,
+        match="incoming bearer token is missing or invalid. Reason: invalid_token",
+    ):
         asyncio.run(run())
 
 

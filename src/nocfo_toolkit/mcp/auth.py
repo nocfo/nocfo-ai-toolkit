@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import inspect
 import json
+import logging
 import os
 import time
 from dataclasses import dataclass
@@ -21,6 +23,8 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from nocfo_toolkit.config import AUTH_HEADER_SCHEME, ToolkitConfig
+
+logger = logging.getLogger(__name__)
 
 
 class MCPAuthConfigurationError(RuntimeError):
@@ -181,10 +185,19 @@ class UserInfoTokenVerifier(TokenVerifier):
                         "Accept": "application/json",
                     },
                 )
-        except httpx.HTTPError:
+        except httpx.HTTPError as exc:
+            logger.info(
+                "OAuth userinfo token verification failed transport_error=%s",
+                type(exc).__name__,
+            )
             return None
 
         if response.status_code != 200:
+            logger.info(
+                "OAuth userinfo token verification failed status=%s detail=%s",
+                response.status_code,
+                _extract_error_detail(response),
+            )
             return None
 
         payload = response.json() if response.content else {}
@@ -227,6 +240,7 @@ class JwtExchangeAuth(httpx.Auth):
         )
         self._refresh_skew_seconds = max(0, refresh_skew_seconds)
         self._cache: dict[str, tuple[str, int | None]] = {}
+        self._locks: dict[str, asyncio.Lock] = {}
 
     @staticmethod
     def _cache_key(access_token: str, claims: dict[str, Any]) -> str:
@@ -255,6 +269,13 @@ class JwtExchangeAuth(httpx.Auth):
             return True
         return time.time() < float(expires_at - self._refresh_skew_seconds)
 
+    def _get_lock(self, cache_key: str) -> asyncio.Lock:
+        lock = self._locks.get(cache_key)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._locks[cache_key] = lock
+        return lock
+
     async def async_auth_flow(self, request: httpx.Request):
         access = get_access_token()
         bearer_token = access.token if access else None
@@ -267,43 +288,99 @@ class JwtExchangeAuth(httpx.Auth):
         jwt_token = cached[0] if cached and self._is_fresh(cached[1]) else None
 
         if jwt_token is None:
-            exchange_request = httpx.Request(
-                method="POST",
-                url=request.url.copy_with(path=self._exchange_path, query=b""),
-                headers={
-                    "Authorization": f"Bearer {bearer_token}",
-                    "Content-Type": "application/json",
-                    "Accept": "application/json",
-                },
-                content=b"{}",
-            )
+            lock = self._get_lock(cache_key)
+            async with lock:
+                cached = self._cache.get(cache_key)
+                jwt_token = cached[0] if cached and self._is_fresh(cached[1]) else None
+                if jwt_token is None:
+                    exchange_request = httpx.Request(
+                        method="POST",
+                        url=request.url.copy_with(path=self._exchange_path, query=b""),
+                        headers={
+                            "Authorization": f"Bearer {bearer_token}",
+                            "Content-Type": "application/json",
+                            "Accept": "application/json",
+                        },
+                        content=b"{}",
+                    )
 
-            exchange_response = yield exchange_request
-            await exchange_response.aread()
-            if exchange_response.status_code == 401:
-                raise RuntimeError(
-                    "JWT exchange failed: incoming bearer token is missing or invalid."
-                )
-            if exchange_response.status_code == 403:
-                raise RuntimeError(
-                    "JWT exchange failed: authenticated user is not allowed to get JWT."
-                )
-            if exchange_response.status_code >= 500:
-                raise RuntimeError("JWT exchange failed due to backend server error.")
-            if exchange_response.status_code >= 400:
-                raise RuntimeError(
-                    f"JWT exchange failed with status {exchange_response.status_code}."
-                )
+                    exchange_response = yield exchange_request
+                    await exchange_response.aread()
+                    if exchange_response.status_code >= 400:
+                        detail = _extract_error_detail(exchange_response)
+                        logger.warning(
+                            "JWT exchange failed status=%s detail=%s",
+                            exchange_response.status_code,
+                            detail,
+                        )
+                    if exchange_response.status_code == 401:
+                        raise RuntimeError(
+                            "JWT exchange failed: incoming bearer token is missing or "
+                            f"invalid. {_format_error_detail(exchange_response)}"
+                        )
+                    if exchange_response.status_code == 403:
+                        raise RuntimeError(
+                            "JWT exchange failed: authenticated user is not allowed to "
+                            f"get JWT. {_format_error_detail(exchange_response)}"
+                        )
+                    if exchange_response.status_code >= 500:
+                        raise RuntimeError(
+                            "JWT exchange failed due to backend server error. "
+                            f"{_format_error_detail(exchange_response)}"
+                        )
+                    if exchange_response.status_code >= 400:
+                        raise RuntimeError(
+                            "JWT exchange failed with status "
+                            f"{exchange_response.status_code}. "
+                            f"{_format_error_detail(exchange_response)}"
+                        )
 
-            payload = exchange_response.json()
-            value = payload.get("token") if isinstance(payload, dict) else None
-            if not isinstance(value, str) or not value:
-                raise RuntimeError("JWT exchange succeeded without token payload.")
-            jwt_token = value
-            self._cache[cache_key] = (jwt_token, self._decode_exp(jwt_token))
+                    payload = exchange_response.json()
+                    value = payload.get("token") if isinstance(payload, dict) else None
+                    if not isinstance(value, str) or not value:
+                        raise RuntimeError(
+                            "JWT exchange succeeded without token payload."
+                        )
+                    jwt_token = value
+                    self._cache[cache_key] = (jwt_token, self._decode_exp(jwt_token))
 
         request.headers["Authorization"] = f"{AUTH_HEADER_SCHEME} {jwt_token}"
         yield request
+
+
+def _extract_error_detail(response: httpx.Response) -> str | None:
+    try:
+        payload = response.json() if response.content else None
+    except ValueError:
+        payload = None
+
+    if isinstance(payload, dict):
+        for key in (
+            "detail",
+            "message",
+            "error_description",
+            "error_message",
+            "error",
+        ):
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                return value
+        if "non_field_errors" in payload and isinstance(
+            payload["non_field_errors"], list
+        ):
+            return "; ".join(
+                item.strip()
+                for item in payload["non_field_errors"]
+                if isinstance(item, str) and item.strip()
+            )
+
+    text = response.text.strip() if response.text else ""
+    return text or None
+
+
+def _format_error_detail(response: httpx.Response) -> str:
+    detail = _extract_error_detail(response)
+    return f"Reason: {detail}" if detail else "Reason unavailable."
 
 
 class _CleanUrlAuthProvider(RemoteAuthProvider):
