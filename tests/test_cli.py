@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from nocfo_toolkit.cli.app import app
 from typer.testing import CliRunner
 
@@ -33,7 +35,11 @@ def test_auth_status_never_prints_token() -> None:
     assert token not in result.output
 
 
-def test_missing_token_error_guides_user() -> None:
+def test_missing_token_error_guides_user(monkeypatch, tmp_path) -> None:
+    monkeypatch.delenv("NOCFO_API_TOKEN", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", os.path.join(str(tmp_path), ".config"))
+
     runner = CliRunner()
     result = runner.invoke(app, ["user", "me"])
 
