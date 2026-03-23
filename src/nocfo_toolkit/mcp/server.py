@@ -16,6 +16,8 @@ from nocfo_toolkit.mcp.auth import (
     apply_tool_auth_metadata,
     build_remote_auth_provider,
 )
+from nocfo_toolkit.mcp.http_error_capture import capture_http_error_response
+from nocfo_toolkit.mcp.middleware import MCPToolErrorMiddleware
 from nocfo_toolkit.openapi import filter_mcp_spec, load_openapi_spec
 
 if TYPE_CHECKING:
@@ -47,6 +49,7 @@ def _create_pat_client(
         base_url=config.base_url,
         headers={"Authorization": f"{AUTH_HEADER_SCHEME} {config.api_token}"},
         timeout=timeout_seconds,
+        event_hooks={"response": [capture_http_error_response]},
     )
 
 
@@ -64,6 +67,7 @@ def _create_oauth_client(
             refresh_skew_seconds=refresh_skew_seconds,
         ),
         timeout=timeout_seconds,
+        event_hooks={"response": [capture_http_error_response]},
     )
 
 
@@ -116,6 +120,7 @@ def create_server(
         client=client,
         name=opts.name,
         auth=server_auth,
+        middleware=[MCPToolErrorMiddleware()],
         route_maps=[
             RouteMap(tags={"MCP"}, mcp_type=MCPType.TOOL),
             RouteMap(mcp_type=MCPType.EXCLUDE),
