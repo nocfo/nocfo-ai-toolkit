@@ -43,14 +43,15 @@ class TokenSource(str, Enum):
 class ToolkitConfig:
     """Resolved toolkit configuration."""
 
-    api_token: str | None
-    token_source: TokenSource
-    base_url: str
-    output_format: OutputFormat
+    api_token: str | None = None
+    token_source: TokenSource = TokenSource.MISSING
+    base_url: str = DEFAULT_BASE_URL
+    output_format: OutputFormat = OutputFormat.TABLE
+    jwt_token: str | None = None
 
     @property
     def is_authenticated(self) -> bool:
-        return bool(self.api_token)
+        return bool(self.api_token or self.jwt_token)
 
 
 class ConfigStore:
@@ -116,6 +117,19 @@ def sanitize_api_token(value: str | None) -> str | None:
     return token
 
 
+def sanitize_jwt_token(value: str | None) -> str | None:
+    """Normalize JWT token from environment."""
+
+    if value is None:
+        return None
+    token = value.strip()
+    if not token:
+        return None
+    if any(ch.isspace() for ch in token):
+        raise ValueError("JWT token cannot contain whitespace characters.")
+    return token
+
+
 def _resolve_token(
     *,
     cli_token: str | None,
@@ -151,6 +165,7 @@ def load_config(
         stored_token=stored.get("api_token"),
     )
     resolved_token = sanitize_api_token(raw_token)
+    resolved_jwt_token = sanitize_jwt_token(os.getenv("NOCFO_JWT_TOKEN"))
     resolved_base_url = (
         base_url
         or os.getenv("NOCFO_BASE_URL")
@@ -166,4 +181,5 @@ def load_config(
         token_source=token_source if resolved_token else TokenSource.MISSING,
         base_url=resolved_base_url,
         output_format=resolved_output,
+        jwt_token=resolved_jwt_token,
     )

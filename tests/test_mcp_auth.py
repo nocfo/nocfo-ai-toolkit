@@ -10,7 +10,11 @@ import httpx
 import pytest
 
 from nocfo_toolkit.mcp.auth import JwtExchangeAuth, MCPAuthConfigurationError
-from nocfo_toolkit.mcp.server import MCPServerOptions, create_server
+from nocfo_toolkit.mcp.server import (
+    MCPServerOptions,
+    _create_pat_client,
+    create_server,
+)
 from nocfo_toolkit.config import OutputFormat, TokenSource, ToolkitConfig
 
 
@@ -205,3 +209,48 @@ def test_create_server_oauth_mode_adds_tool_auth_metadata(monkeypatch) -> None:
     assert meta["mcp/www_authenticate"] == "Bearer"
     assert meta["securitySchemes"][0]["type"] == "oauth2"
     assert meta["securitySchemes"][0]["scopes"] == ["read"]
+
+
+def test_create_pat_client_prefers_jwt_token() -> None:
+    config = ToolkitConfig(
+        api_token="pat-token",
+        token_source=TokenSource.ENV,
+        base_url="https://api-prd.nocfo.io",
+        output_format=OutputFormat.TABLE,
+        jwt_token="jwt-token",
+    )
+
+    client = _create_pat_client(config, timeout_seconds=5.0)
+    try:
+        assert client.headers["Authorization"] == "Token jwt-token"
+    finally:
+        asyncio.run(client.aclose())
+
+
+def test_create_pat_client_falls_back_to_pat() -> None:
+    config = ToolkitConfig(
+        api_token="pat-token",
+        token_source=TokenSource.ENV,
+        base_url="https://api-prd.nocfo.io",
+        output_format=OutputFormat.TABLE,
+        jwt_token=None,
+    )
+
+    client = _create_pat_client(config, timeout_seconds=5.0)
+    try:
+        assert client.headers["Authorization"] == "Token pat-token"
+    finally:
+        asyncio.run(client.aclose())
+
+
+def test_create_pat_client_requires_jwt_or_pat() -> None:
+    config = ToolkitConfig(
+        api_token=None,
+        token_source=TokenSource.MISSING,
+        base_url="https://api-prd.nocfo.io",
+        output_format=OutputFormat.TABLE,
+        jwt_token=None,
+    )
+
+    with pytest.raises(RuntimeError, match="Missing authentication token"):
+        _create_pat_client(config, timeout_seconds=5.0)

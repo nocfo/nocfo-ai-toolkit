@@ -94,7 +94,7 @@ Open Claude Desktop config and add:
       "command": "uvx",
       "args": ["--from", "nocfo-cli", "nocfo", "mcp"],
       "env": {
-        "NOCFO_API_TOKEN": "your_token_here"
+        "NOCFO_JWT_TOKEN": "your_jwt_here"
       }
     }
   }
@@ -124,7 +124,7 @@ Add the following to your Cursor MCP config (`~/.cursor/mcp.json`):
       "command": "uvx",
       "args": ["--from", "nocfo-cli", "nocfo", "mcp"],
       "env": {
-        "NOCFO_API_TOKEN": "your_token_here"
+        "NOCFO_JWT_TOKEN": "your_jwt_here"
       }
     }
   }
@@ -163,6 +163,8 @@ nocfo --output json businesses list
 
 - `nocfo mcp` = local stdio mode
 - `nocfo mcp --transport http --auth-mode oauth --mcp-base-url mcp.nocfo.io` = remote HTTP mode
+- Local stdio auth order: `NOCFO_JWT_TOKEN` first, then `NOCFO_API_TOKEN`
+- `NOCFO_API_TOKEN` is optional for stdio when `NOCFO_JWT_TOKEN` is set
 
 Detailed auth contract and troubleshooting are in `MCP_AUTHENTICATION.md`.
 

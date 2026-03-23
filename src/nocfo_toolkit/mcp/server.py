@@ -40,14 +40,15 @@ class MCPServerOptions:
 def _create_pat_client(
     config: ToolkitConfig, timeout_seconds: float
 ) -> httpx.AsyncClient:
-    if not config.api_token:
+    resolved_token = config.jwt_token or config.api_token
+    if not resolved_token:
         raise RuntimeError(
-            "Missing API token. Set NOCFO_API_TOKEN or run `nocfo auth configure` "
-            "before starting MCP server in PAT mode."
+            "Missing authentication token. Set NOCFO_JWT_TOKEN or NOCFO_API_TOKEN, "
+            "or run `nocfo auth configure` before starting MCP server in PAT mode."
         )
     return httpx.AsyncClient(
         base_url=config.base_url,
-        headers={"Authorization": f"{AUTH_HEADER_SCHEME} {config.api_token}"},
+        headers={"Authorization": f"{AUTH_HEADER_SCHEME} {resolved_token}"},
         timeout=timeout_seconds,
         event_hooks={"response": [capture_http_error_response]},
     )

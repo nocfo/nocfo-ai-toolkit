@@ -104,7 +104,11 @@ def run_mcp_server(
         help="Comma-separated OAuth scopes required for MCP tools.",
     ),
 ) -> None:
-    """Run NoCFO MCP server over stdio or HTTP transport."""
+    """Run NoCFO MCP server over stdio or HTTP transport.
+
+    Stdio mode accepts either NOCFO_JWT_TOKEN or NOCFO_API_TOKEN.
+    HTTP oauth mode uses connector bearer verification + JWT exchange flow.
+    """
 
     from nocfo_toolkit.mcp.server import MCPServerOptions, run_http_server, run_server
 

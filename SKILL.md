@@ -21,6 +21,7 @@ This skill helps an agent use the `nocfo` terminal client efficiently and safely
 Environment variables:
 
 - `NOCFO_API_TOKEN`
+- `NOCFO_JWT_TOKEN` (used by `nocfo mcp` stdio mode; preferred when both are set)
 - `NOCFO_BASE_URL` (default `https://api-prd.nocfo.io`)
 - `NOCFO_OUTPUT_FORMAT` (`table` or `json`)
 
