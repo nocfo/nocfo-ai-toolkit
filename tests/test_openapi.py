@@ -6,7 +6,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from nocfo_toolkit.openapi import load_openapi_spec
+from nocfo_toolkit.openapi import filter_mcp_spec, load_openapi_spec
 
 
 def test_load_openapi_spec_retries_and_succeeds(monkeypatch, tmp_path: Path) -> None:
@@ -79,3 +79,45 @@ def test_load_openapi_spec_raises_when_network_and_cache_fail(
             max_attempts=2,
             retry_delay_seconds=0,
         )
+
+
+def test_filter_mcp_spec_excludes_operations_marked_hidden_for_mcp() -> None:
+    spec = {
+        "paths": {
+            "/v1/business/{slug}/account/{id}/": {
+                "put": {
+                    "operationId": "replace_account",
+                    "tags": ["Accounts", "MCP"],
+                    "x-mcp-exclude": True,
+                },
+                "patch": {
+                    "operationId": "update_account",
+                    "tags": ["Accounts", "MCP"],
+                },
+            }
+        }
+    }
+
+    filtered = filter_mcp_spec(spec)
+    methods = filtered["paths"]["/v1/business/{slug}/account/{id}/"]
+
+    assert "patch" in methods
+    assert "put" not in methods
+
+
+def test_filter_mcp_spec_keeps_mcp_operation_without_exclude_marker() -> None:
+    spec = {
+        "paths": {
+            "/v1/business/{slug}/header/{id}/": {
+                "patch": {
+                    "operationId": "update_header",
+                    "tags": ["Accounts", "MCP"],
+                }
+            }
+        }
+    }
+
+    filtered = filter_mcp_spec(spec)
+    methods = filtered["paths"]["/v1/business/{slug}/header/{id}/"]
+
+    assert "patch" in methods

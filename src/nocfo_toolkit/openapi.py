@@ -49,7 +49,7 @@ def load_openapi_spec(
 
 
 def filter_mcp_spec(spec: dict[str, Any], mcp_tag: str = "MCP") -> dict[str, Any]:
-    """Return spec containing only operations tagged as MCP."""
+    """Return spec containing only MCP-visible operations."""
 
     filtered_paths: dict[str, Any] = {}
     for path, methods in spec.get("paths", {}).items():
@@ -59,9 +59,13 @@ def filter_mcp_spec(spec: dict[str, Any], mcp_tag: str = "MCP") -> dict[str, Any
         for method, meta in methods.items():
             if not isinstance(meta, dict):
                 continue
+
             tags = meta.get("tags", [])
-            if mcp_tag in tags:
-                kept_methods[method] = meta
+            if mcp_tag not in tags:
+                continue
+            if meta.get("x-mcp-exclude") is True:
+                continue
+            kept_methods[method] = meta
         if kept_methods:
             filtered_paths[path] = kept_methods
 
