@@ -43,9 +43,11 @@ async def capture_http_error_response(response: httpx.Response) -> None:
 
     try:
         payload: Any = response.json() if response.content else None
-    except ValueError:
-        text = response.text.strip()
-        payload = text[:1000] if text else None
+    except (ValueError, httpx.ResponseNotRead):
+        try:
+            payload = (response.text or "").strip()[:1000] or None
+        except (httpx.HTTPError, httpx.ResponseNotRead):
+            payload = None
 
     _LAST_HTTP_ERROR.set(
         {

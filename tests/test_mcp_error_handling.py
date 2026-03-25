@@ -10,13 +10,28 @@ from fastmcp.server.middleware import MiddlewareContext
 from mcp.types import CallToolRequestParams
 
 from nocfo_toolkit.mcp.error_handling import normalize_http_error
-from nocfo_toolkit.mcp.http_error_capture import capture_http_error_response
+from nocfo_toolkit.mcp.http_error_capture import (
+    capture_http_error_response,
+    clear_last_http_error,
+    get_last_http_error,
+)
 from nocfo_toolkit.mcp.middleware import MCPToolErrorMiddleware
 
 
 class _UnreadAsyncStream(httpx.AsyncByteStream):
     async def __aiter__(self):
         yield b'{"detail":"streamed failure"}'
+
+    async def aclose(self) -> None:
+        return None
+
+
+class _BrokenAsyncStream(httpx.AsyncByteStream):
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        raise httpx.ReadError("stream failed")
 
     async def aclose(self) -> None:
         return None
@@ -126,3 +141,15 @@ def test_capture_http_error_response_reads_success_streaming_response() -> None:
     asyncio.run(capture_http_error_response(response))
 
     assert response.json() == {"detail": "streamed failure"}
+
+
+def test_capture_http_error_response_handles_broken_stream_without_crashing() -> None:
+    clear_last_http_error()
+    request = httpx.Request("GET", "https://api.example.com/v1/businesses/")
+    response = httpx.Response(400, request=request, stream=_BrokenAsyncStream())
+
+    async def run() -> None:
+        await capture_http_error_response(response)
+        assert get_last_http_error() is None
+
+    asyncio.run(run())
