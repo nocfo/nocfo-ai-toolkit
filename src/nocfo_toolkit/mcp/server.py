@@ -3,10 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
 import httpx
+from pydantic import AnyUrl
+from fastmcp.server.providers.openapi.components import (
+    OpenAPIResource,
+    OpenAPIResourceTemplate,
+)
+from fastmcp.server.providers.openapi.routing import MCPType, RouteMap
 from fastmcp.tools.tool import Tool
 
 from nocfo_toolkit.config import AUTH_HEADER_SCHEME, ToolkitConfig
@@ -18,10 +25,121 @@ from nocfo_toolkit.mcp.auth import (
 )
 from nocfo_toolkit.mcp.http_error_capture import capture_http_error_response
 from nocfo_toolkit.mcp.middleware import MCPToolErrorMiddleware
-from nocfo_toolkit.openapi import filter_mcp_spec, load_openapi_spec
+from nocfo_toolkit.openapi import (
+    MCP_RESOURCE_TAG,
+    MCP_TOOL_TAG,
+    filter_mcp_spec,
+    load_openapi_spec,
+)
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
+
+# Semantic mapping for MCP-tagged routes (see FastMCP OpenAPI route maps):
+# https://gofastmcp.com/integrations/openapi#custom-route-maps
+MCP_OPENAPI_ROUTE_MAPS: list[RouteMap] = [
+    RouteMap(tags={MCP_RESOURCE_TAG}, mcp_type=MCPType.RESOURCE),
+    RouteMap(tags={MCP_TOOL_TAG}, mcp_type=MCPType.TOOL),
+    RouteMap(mcp_type=MCPType.EXCLUDE),
+]
+
+# Must match ``nocfo.spectacular_hooks.MCP_NAMESPACE_EXTENSION`` (set by ``mcp_extend_schema``).
+X_MCP_NAMESPACE = "x-mcp-namespace"
+_X_MCP_PREFIX = "x-mcp-"
+X_NOCFO_MCP_SERVER_INSTRUCTIONS = "x-nocfo-mcp-server-instructions"
+
+
+def _normalize_mcp_namespace_token(value: str) -> str:
+    """Normalize backend ``MCPNamespace`` string (allows accidental human-readable input)."""
+    normalized = value.strip()
+    if not normalized:
+        return ""
+    normalized = normalized.replace("-", "_").replace(" ", "_")
+    normalized = re.sub(r"(?<!^)(?=[A-Z])", "_", normalized)
+    normalized = re.sub(r"[^a-zA-Z0-9_]", "", normalized)
+    normalized = re.sub(r"_+", "_", normalized)
+    return normalized.strip("_").lower()
+
+
+def build_mcp_component_name(
+    operation_id: str, extensions: dict[str, Any] | None
+) -> str:
+    """Build MCP name ``<x-mcp-namespace>_<operation_id_with_dots_as_underscores>``.
+
+    Namespace is read from the OpenAPI operation extension ``x-mcp-namespace`` (set in
+    the backend via ``mcp_extend_schema``). If missing, ``operation_id`` is
+    returned unchanged.
+    """
+    if not operation_id or not str(operation_id).strip():
+        return operation_id
+    raw = (extensions or {}).get(X_MCP_NAMESPACE)
+    if not isinstance(raw, str) or not raw.strip():
+        return operation_id
+    ns = _normalize_mcp_namespace_token(raw)
+    if not ns:
+        return operation_id
+    # Avoid duplicating the namespace if operation_id already starts with it.
+    # Example: operation_id "invoicing.contact.create" with ns "invoicing"
+    # should become "invoicing_contact_create", not "invoicing_invoicing_contact_create".
+    if operation_id.startswith(f"{ns}."):
+        operation_id = operation_id[len(ns) + 1 :]
+    return f"{ns}_{operation_id.replace('.', '_')}"
+
+
+def _resource_uri_with_name(uri: str | AnyUrl, display_name: str) -> AnyUrl:
+    """Keep ``resource://`` prefix and optional ``/{param}`` suffix; replace the name segment."""
+    uri_str = str(uri)
+    return AnyUrl(re.sub(r"^(resource://)([^/]+)", rf"\1{display_name}", uri_str))
+
+
+def apply_mcp_namespace_names(route: Any, component: Any) -> None:
+    """Apply ``x-mcp-namespace``-based MCP names to a tool, resource, or template.
+
+    Used by :func:`create_server` and by tests that construct an
+    :class:`OpenAPIProvider` with the same ``NoCFO`` naming policy.
+    """
+    if not getattr(route, "operation_id", None):
+        return
+    ext = getattr(route, "extensions", None) or {}
+    display_name = build_mcp_component_name(route.operation_id, ext)
+    if isinstance(component, Tool):
+        component.name = display_name
+        component.title = display_name
+    elif isinstance(component, OpenAPIResource):
+        component.name = display_name
+        component.uri = _resource_uri_with_name(component.uri, display_name)
+    elif isinstance(component, OpenAPIResourceTemplate):
+        component.name = display_name
+        component.uri_template = str(
+            _resource_uri_with_name(component.uri_template, display_name)
+        )
+
+
+def apply_mcp_operation_metadata(route: Any, component: Any) -> None:
+    """Attach OpenAPI ``x-mcp-*`` operation extensions to component metadata."""
+    extensions = getattr(route, "extensions", None) or {}
+    mcp_extensions = {
+        key: value
+        for key, value in extensions.items()
+        if isinstance(key, str) and key.startswith(_X_MCP_PREFIX)
+    }
+    if not mcp_extensions:
+        return
+
+    meta: dict[str, Any] = dict(getattr(component, "meta", None) or {})
+    nocfo_meta: dict[str, Any] = dict(meta.get("nocfo") or {})
+    nocfo_meta["mcp"] = mcp_extensions
+    meta["nocfo"] = nocfo_meta
+    component.meta = meta
+
+
+def _get_server_instructions(openapi_spec: dict[str, Any]) -> str | None:
+    """Read backend-owned MCP server instructions from OpenAPI root extensions."""
+    instructions = openapi_spec.get(X_NOCFO_MCP_SERVER_INSTRUCTIONS)
+    if not isinstance(instructions, str):
+        return None
+    cleaned = instructions.strip()
+    return cleaned or None
 
 
 @dataclass(frozen=True)
@@ -80,11 +198,11 @@ def create_server(
     """Create an MCP server from NoCFO OpenAPI specification."""
 
     from fastmcp import FastMCP
-    from fastmcp.server.providers.openapi.routing import MCPType, RouteMap
 
     opts = options or MCPServerOptions()
     spec = load_openapi_spec(base_url=config.base_url)
     filtered_spec = filter_mcp_spec(spec, mcp_tag="MCP")
+    server_instructions = _get_server_instructions(spec)
 
     if opts.auth_mode == "oauth":
         client = _create_oauth_client(
@@ -107,10 +225,12 @@ def create_server(
         client = _create_pat_client(config, opts.timeout_seconds)
         server_auth = None
 
-    def component_mapper(_: Any, component: Any) -> None:
-        if opts.auth_mode != "oauth":
-            return
-        if isinstance(component, Tool):
+    def component_mapper(route: Any, component: Any) -> None:
+        apply_mcp_namespace_names(route, component)
+        apply_mcp_operation_metadata(route, component)
+        if opts.auth_mode == "oauth" and isinstance(
+            component, (Tool, OpenAPIResource, OpenAPIResourceTemplate)
+        ):
             apply_tool_auth_metadata(
                 component,
                 required_scopes=opts.required_scopes,
@@ -120,14 +240,12 @@ def create_server(
         openapi_spec=filtered_spec,
         client=client,
         name=opts.name,
+        instructions=server_instructions,
         auth=server_auth,
         middleware=[MCPToolErrorMiddleware()],
-        route_maps=[
-            RouteMap(tags={"MCP"}, mcp_type=MCPType.TOOL),
-            RouteMap(mcp_type=MCPType.EXCLUDE),
-        ],
+        route_maps=MCP_OPENAPI_ROUTE_MAPS,
         mcp_component_fn=component_mapper,
-        validate_output=False,
+        validate_output=True,
     )
 
 
