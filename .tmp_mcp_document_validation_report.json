@@ -1,0 +1,1332 @@
+{
+  "env": {
+    "backend_url": "http://localhost:8000",
+    "mcp_url": "http://127.0.0.1:8002/mcp",
+    "auth_mode": "JWT via server env"
+  },
+  "seeded": {
+    "business_slug": "demo-bfa195",
+    "draft_no_suggestion_id": 12,
+    "draft_with_suggestion_id": 13,
+    "active_suggestion_id": 36,
+    "update_contact_id": 2,
+    "update_tag_id": 4
+  },
+  "executions": {
+    "tool_names": [
+      "bookkeeping_accounts_list",
+      "bookkeeping_account_create",
+      "bookkeeping_account_retrieve",
+      "bookkeeping_account_delete",
+      "bookkeeping_account_update",
+      "bookkeeping_account_hide",
+      "bookkeeping_account_show",
+      "invoicing_contacts_list",
+      "invoicing_contact_create",
+      "invoicing_contact_retrieve",
+      "invoicing_contact_delete",
+      "invoicing_contact_update",
+      "bookkeeping_entries_list",
+      "bookkeeping_document_relations_list",
+      "bookkeeping_document_relation_create",
+      "bookkeeping_document_relation_retrieve",
+      "bookkeeping_document_relation_delete",
+      "bookkeeping_document_relation_update",
+      "bookkeeping_document_relation_suggestions_list",
+      "bookkeeping_document_relation_suggestions_preview",
+      "bookkeeping_file_upload",
+      "bookkeeping_files_list",
+      "bookkeeping_file_retrieve",
+      "bookkeeping_file_delete",
+      "bookkeeping_file_update",
+      "bookkeeping_headers_list",
+      "bookkeeping_header_create",
+      "bookkeeping_header_retrieve",
+      "common_business_permissions_retrieve",
+      "reporting_accounting_periods_list",
+      "reporting_accounting_period_retrieve",
+      "reporting_accounting_period_delete",
+      "reporting_accounting_period_update",
+      "reporting_balance_sheet_retrieve",
+      "reporting_equity_changes_retrieve",
+      "reporting_income_statement_retrieve",
+      "reporting_journal_retrieve",
+      "reporting_ledger_retrieve",
+      "reporting_vat_retrieve",
+      "bookkeeping_tags_list",
+      "bookkeeping_tag_create",
+      "bookkeeping_tag_retrieve",
+      "bookkeeping_tag_delete",
+      "bookkeeping_tag_update",
+      "reporting_vat_periods_list",
+      "reporting_vat_period_retrieve",
+      "reporting_vat_period_delete",
+      "reporting_vat_period_update",
+      "invoicing_sales_invoices_list",
+      "invoicing_sales_invoice_create",
+      "invoicing_sales_invoice_retrieve",
+      "invoicing_sales_invoice_delete",
+      "invoicing_sales_invoice_update",
+      "invoicing_sales_invoice_accept",
+      "invoicing_sales_invoice_mark_credit_loss",
+      "invoicing_sales_invoice_recurrence_disable",
+      "invoicing_sales_invoice_mark_paid",
+      "invoicing_sales_invoice_mark_unpaid",
+      "invoicing_sales_invoice_delivery_methods",
+      "invoicing_sales_invoice_send",
+      "invoicing_sales_invoice_status_message_create",
+      "invoicing_sales_invoice_status_message_delete",
+      "invoicing_products_list",
+      "invoicing_product_create",
+      "invoicing_product_retrieve",
+      "invoicing_product_delete",
+      "invoicing_product_update",
+      "invoicing_purchase_invoices_list",
+      "invoicing_purchase_invoice_retrieve",
+      "invoicing_purchase_invoice_delete",
+      "invoicing_purchase_invoice_update",
+      "bookkeeping_documents_list",
+      "bookkeeping_document_retrieve",
+      "bookkeeping_document_update",
+      "bookkeeping_document_finalize_active_suggestion",
+      "common_accessible_businesses_list",
+      "common_user_retrieve",
+      "common_user_update"
+    ],
+    "resource_names": [
+      "constants_einvoice_operators_retrieve",
+      "constants_vat_codes_retrieve",
+      "constants_vat_rates_retrieve",
+      "bookkeeping_blueprint_retrieve",
+      "common_bootstrap_retrieve",
+      "common_server_instructions_retrieve"
+    ],
+    "common_bootstrap_retrieve": [
+      {
+        "uri": "resource://common_bootstrap_retrieve",
+        "mime_type": "text/markdown",
+        "text": "# MCP Bootstrap\n\n- user_id: `1`\n- user_email: `juho.enala@nocfo.io`\n- auth_scope: `user_scoped`\n\n\n\nIf slug is unknown, you can check available businesses and their slugs by calling `common_accessible_businesses_list`.\n\n\n\n## Common resources\n\n- `common_server_instructions_retrieve`\n- `common_accessible_businesses_list`\n- `bookkeeping_blueprint_retrieve`\n- `common_business_permissions_retrieve` (requires `business_slug`)\n- `constants_vat_codes_retrieve` (requires `business_slug`)\n- `constants_vat_rates_retrieve` (requires `business_slug` + `date_at`)\n- `constants_einvoice_operators_retrieve` (requires `business_slug`)\n\nNext steps:\n\n1. Read `common_server_instructions_retrieve` for detailed workflow guidance.\n2. Select `business_slug` from `common_accessible_businesses_list`.\n3. If permissions are omitted here, call `common_business_permissions_retrieve` with `business_slug`.\n4. For each operation, use `/openapi-mcp/` description table to verify `x-mcp-required-permissions`.\n5. Require explicit user confirmation when `x-mcp-requires-confirmation=true`.\n6. If a document is draft and suggestions exist, review suggestion workflows before mutating the document directly.\n"
+      }
+    ],
+    "common_server_instructions_retrieve": [
+      {
+        "uri": "resource://common_server_instructions_retrieve",
+        "mime_type": "text/markdown",
+        "text": "# NoCFO MCP Detailed Guidance\n\nUse this document as a long-form reference. For the mandatory startup sequence, follow server-level MCP instructions first.\n\n## Workflow\n\n1. Read `common_bootstrap_retrieve`.\n2. If bootstrap includes an effective business, stay in that `business_slug`; otherwise call `common_accessible_businesses_list` and select one slug.\n3. Before accounting mutations, read `bookkeeping_blueprint_retrieve`.\n4. Resolve business-specific constants under `constants.*` before submitting payloads that depend on VAT or identifiers.\n5. Before executing a business mutation, verify required permissions from bootstrap; if omitted there, call `common_business_permissions_retrieve` with `business_slug`.\n\n## Interpreting MCP Metadata\n\n- `x-mcp-mutates-state=true`: write operation.\n- `x-mcp-has-external-side-effects=true`: can affect external channels/systems.\n- `x-mcp-requires-confirmation=true`: require explicit confirmation before execution.\n- `x-mcp-idempotency`: use to decide safe retry strategy.\n- `x-mcp-required-permissions` + `x-mcp-permission-mode`: compare against permissions shown in bootstrap.\n\n## Business Context Rules\n\n- Most tools/resources are business-scoped and require `business_slug`.\n- `identity.*` operations are user-scoped.\n- If JWT includes `business_slug`, bootstrap and tool usage must stay in that business scope.\n\n## Accounting-Specific Caution\n\n- Blueprint changes can recalculate document entries.\n- Always align blueprint logic with business VAT configuration:\n  - `constants_vat_codes_retrieve`\n  - `constants_vat_rates_retrieve` (`date_at` required)\n- For agent-driven document workflows, use document tools:\n  - `bookkeeping_documents_list`\n  - `bookkeeping_document_retrieve`\n  - `bookkeeping_document_update`\n  - `bookkeeping_document_finalize_active_suggestion`\n- Treat direct document editing as the default path.\n- If the document payload shows suggestion metadata, inspect `suggestion_info`, `workflow`, and `available_actions` before mutating the document.\n- When `suggestion_info.handling.recommended_action` is `finalize_active_suggestion`, prefer `bookkeeping_document_finalize_active_suggestion` unless the user explicitly asks for direct manual document editing.\n"
+      }
+    ],
+    "bookkeeping_blueprint_retrieve": [
+      {
+        "uri": "resource://bookkeeping_blueprint_retrieve",
+        "mime_type": "text/markdown",
+        "text": "# Blueprint Guide\n\nBlueprint defines how a document is posted to accounting.\nThink of it as a posting rule: once the logic is defined, the system generates the entries from it.\n\nThis document provides practical context. Exact field types and validations are available in the schema.\n\n## What blueprint decides\n\n- Which accounts the transaction is posted to.\n- How debit and credit are formed.\n- How VAT is handled on entry rows.\n\n## Common practical models\n\n### Sales style\n\n- You define the `credit_entries` rows.\n- The counter-entry is posted to one debit account via `debet_account_id`.\n- `expense_entries` can add extra cost rows when needed.\n\n### Purchase style\n\n- You define the `debet_entries` rows.\n- The counter-entry is posted to one credit account via `credit_account_id`.\n\n### Manual style\n\n- You define both sides explicitly: `debet_entries` + `credit_entries`.\n- Use this when you want full control over the posting.\n\n## Field mapping in plain language\n\n- `debet_account_id`: balancing shortcut account on the debit side.\n- `credit_account_id`: balancing shortcut account on the credit side.\n- `debet_entries`: explicit debit rows.\n- `credit_entries`: explicit credit rows.\n- `expense_entries`: extra rows (usually used in sales-style logic).\n\nRow fields (`debet_entries` / `credit_entries` / `expense_entries`):\n\n- `account_id`\n- `amount`\n- `description`\n- `vat_code`\n- `vat_rate`\n- `vat_method`\n\n## Important note about shortcut fields\n\n`debet_account_id` and `credit_account_id` are shortcuts for a balancing row.\nThe balancing row created from these shortcuts is always posted without a separate VAT definition on that balancing row itself.\n\nIn other words: VAT is defined on blueprint entry rows (`*_entries`), not in shortcut fields.\n\n### Example: `debet_account_id: 1`\n\nShortcut form:\n\n```json\n{\n  \"debet_account_id\": 1,\n  \"credit_entries\": [\n    {\n      \"account_id\": 3000,\n      \"amount\": 10000,\n      \"vat_code\": 1,\n      \"vat_rate\": 24\n    }\n  ]\n}\n```\n\nThe same idea as an explicit row:\n\n```json\n{\n  \"debet_entries\": [\n    {\n      \"account_id\": 1,\n      \"amount\": 10000\n    }\n  ],\n  \"credit_entries\": [\n    {\n      \"account_id\": 3000,\n      \"amount\": 10000,\n      \"vat_code\": 1,\n      \"vat_rate\": 24\n    }\n  ]\n}\n```\n\n## VAT in practice\n\n- Always fetch business-specific VAT codes first: `constants_vat_codes_retrieve` (with `business_slug`).\n- Choose `vat_code` based on the real VAT treatment of the document.\n\n## Recommended workflow\n\n1. Select business context (`common_bootstrap_retrieve`).\n2. Fetch business VAT codes (`constants_vat_codes_retrieve`).\n3. Define the accounting logic first (what should happen on accounts).\n4. Write the blueprint from that logic.\n5. Make sure the result is balanced and understandable to another accountant.\n\n## Remember\n\nWhen the blueprint is changed on a document, the document postings are recalculated using the new logic.\n"
+      }
+    ],
+    "common_accessible_businesses_list": {
+      "tool": "common_accessible_businesses_list",
+      "args": {},
+      "ok": true,
+      "is_error": false,
+      "raw_text": [
+        "{\"result\":[{\"slug\":\"demo-bfa195\",\"name\":\"Demo Yritys Oy\",\"form_name\":\"Demo Company\",\"identifiers\":[{\"key\":\"Business ID\",\"type\":\"y_tunnus\",\"value\":\"demo-bfa195\"}],\"granted_permission_ids\":[\"admin\"],\"granted_permissions\":[{\"id\":\"admin\",\"name\":\"Admin\",\"explanation\":\"All company rights. Be careful who you assign this!\"}]}]}"
+      ],
+      "data": [
+        {
+          "slug": "demo-bfa195",
+          "name": "Demo Yritys Oy",
+          "form_name": "Demo Company",
+          "identifiers": [
+            {
+              "key": "Business ID",
+              "type": "y_tunnus",
+              "value": "demo-bfa195"
+            }
+          ],
+          "granted_permission_ids": [
+            "admin"
+          ],
+          "granted_permissions": [
+            {
+              "id": "admin",
+              "name": "Admin",
+              "explanation": "All company rights. Be careful who you assign this!"
+            }
+          ]
+        }
+      ],
+      "exception": null
+    },
+    "common_business_permissions_retrieve": {
+      "tool": "common_business_permissions_retrieve",
+      "args": {
+        "business_slug": "demo-bfa195"
+      },
+      "ok": true,
+      "is_error": false,
+      "raw_text": [
+        "{\"business_slug\":\"demo-bfa195\",\"granted_permission_ids\":[\"admin\"],\"granted_permissions\":[{\"id\":\"admin\",\"name\":\"Admin\",\"explanation\":\"All company rights. Be careful who you assign this!\"}]}"
+      ],
+      "data": {
+        "business_slug": "demo-bfa195",
+        "granted_permission_ids": [
+          "admin"
+        ],
+        "granted_permissions": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "explanation": "All company rights. Be careful who you assign this!"
+          }
+        ]
+      },
+      "exception": null
+    },
+    "bookkeeping_documents_list": {
+      "tool": "bookkeeping_documents_list",
+      "args": {
+        "business_slug": "demo-bfa195",
+        "page": 1,
+        "page_size": 100
+      },
+      "ok": true,
+      "is_error": false,
+      "raw_text": [
+        "{\"count\":9,\"next\":null,\"prev\":null,\"size\":9,\"results\":[{\"id\":13,\"number\":null,\"is_flagged\":false,\"is_locked\":false,\"is_draft\":true,\"date\":\"2026-04-02\",\"description\":\"MCP draft with suggestion\",\"contact_id\":1,\"contact_name\":\"MCP Test Contact f4d00c\",\"balance\":10.0,\"attachment_ids\":[],\"blueprint\":{\"debet_account_id\":null,\"debet_entries\":[{\"account_id\":1,\"description\":null,\"vat_code\":0,\"vat_rate\":0.0,\"vat_method\":0,\"amount\":1.0}],\"credit_account_id\":null,\"credit_entries\":[{\"account_id\":2,\"description\":null,\"vat_code\":0,\"vat_rate\":0.0,\"vat_method\":0,\"amount\":1.0}],\"expense_entries\":[]},\"tag_ids\":[3],\"relations\":[],\"workflow\":{\"workflow_status\":\"draft_with_active_suggestion\",\"preferred_action\":\"finalize_active_suggestion\",\"document_editable\":true},\"suggestion_info\":{\"has_active_suggestion\":true,\"active_suggestion\":{\"id\":36,\"key\":\"ai-suggestion\",\"description\":\"Seed suggestion\",\"has_user_modifications\":false,\"state\":\"active\"},\"handling\":{\"status\":\"active\",\"recommended_action\":\"finalize_active_suggestion\",\"instructions\":\"This document has an active accounting suggestion. Update the document directly only for manual bookkeeping changes. Use `finalize_active_suggestion` to apply the suggested accounting entries and finalize the draft.\"}},\"available_actions\":[{\"id\":\"edit_document\",\"method\":\"PATCH\",\"path\":\"/v1/mcp/business/demo-bfa195/documents/13/\",\"description\":\"Update the document directly.\",\"recommended\":false},{\"id\":\"finalize_active_suggestion\",\"method\":\"POST\",\"path\":\"/v1/mcp/business/demo-bfa195/documents/13/actions/finalize_active_suggestion/\",\"description\":\"Apply the active accounting suggestion and finalize the draft document.\",\"recommended\":true}]},{\"id\":12,\"number\":\"260402-1\",\"is_flagged\":false,\"is_locked\":false,\"is_draft\":false,\"date\":\"2026-04-02\",\"description\":\"MCP draft no suggestion (updated via MCP test)\",\"contact_id\":2,\"contact_name\":\"MCP Update Contact 37aaac\",\"balance\":0.0,\"attachment_ids\":[],\"blueprint\":{\"debet_account_id\":null,\"debet_entries\":[{\"account_id\":1,\"description\":null,\"vat_code\":0,\"vat_rate\":0.0,\"vat_method\":0,\"amount\":1.0}],\"credit_account_id\":null,\"credit_entries\":[{\"account_id\":2,\"description\":null,\"vat_code\":0,\"vat_rate\":0.0,\"vat_method\":0,\"amount\":1.0}],\"expense_entries\":[]},\"tag_ids\":[4],\"relations\":[],\"workflow\":{\"workflow_status\":\"finalized\",\"preferred_action\":\"edit_document\",\"document_editable\":true},\"suggestion_info\":{\"has_active_suggestion\":false,\"active_suggestion\":null,\"handling\":{\"status\":\"none\",\"recommended_action\":\"edit_document\",\"instructions\":\"No active accounting suggestion exists for this document. Update the document directly when changes are needed.\"}},\"available_actions\":[{\"id\":\"edit_document\",\"method\":\"PATCH\",\"path\":\"/v1/mcp/business/demo-bfa195/documents/12/\",\"description\":\"Update the document directly.\",\"recommended\":true}]},{\"id\":11,\"number\":null,\"is_flagged\":false,\"is_locked\":false,\"is_draft\":true,\"date\":\"2025-12-15\",\"description\":\"Palkka Juho Enala\",\"contact_id\":null,\"contact_name\":null,\"balance\":-6537.25,\"attachment_ids\":[],\"blueprint\":{\"debet_account_id\":null,\"debet_entries\":[],\"credit_account_id\":null,\"credit_entries\":[],\"expense_entries\":[]},\"tag_ids\":[],\"relations\":[],\"workflow\":{\"workflow_status\":\"draft_with_active_suggestion\",\"preferred_action\":\"finalize_active_suggestion\",\"document_editable\":true},\"suggestion_info\":{\"has_active_suggestion\":true,\"active_suggestion\":{\"id\":5,\"key\":\"ai-suggestion\",\"description\":\"Työntekijäpalkat\",\"has_user_modifications\":false,\"state\":\"active\"},\"handling\":{\"status\":\"active\",\"recommended_action\":\"finalize_active_suggestion\",\"instructions\":\"This document has an active accounting suggestion. Update the document directly only for manual bookkeeping changes. Use `finalize_active_suggestion` to apply the suggested accounting entries and finalize the draft.\"}},\"available_actions\":[{\"id\":\"edit_document\",\"method\":\"PATCH\",\"path\":\"/v1/mcp/business/demo-bfa195/documents/11/\",\"description\":\"Update the document directly.\",\"recommended\":false},{\"id\":\"finalize_active_suggestion\",\"method\":\"POST\",\"path\":\"/v1/mcp/business/demo-bfa195/documents/11/actions/finalize_active_suggestion/\",\"description\":\"Apply the active accounting suggestion and finalize the draft document.\",\"recommended\":true}]},{\"id\":10,\"number\":null,\"is_flagged\":false,\"is_locked\":false,\"is_draft\":true,\"date\":\"2025-07-31\",\"description\":\"HAHHAHHAHAA\",\"contact_id\":null,\"contact_name\":null,\"balance\":-6.9,\"attachment_ids\":[],\"blueprint\":{\"debet_account_id\":null,\"debet_entries\":[{\"account_id\":22,\"description\":null,\"vat_code\":1,\"vat_rate\":25.5,\"vat_method\":0,\"amount\":6.9}],\"credit_account_id\":null,\"credit_entries\":[{\"account_id\":28,\"description\":null,\"vat_code\":5,\"vat_rate\":14.0,\"vat_method\":0,\"amount\":6.9}],\"expense_entries\":[]},\"tag_ids\":[],\"relations\":[],\"workflow\":{\"workflow_status\":\"draft_with_active_suggestion\",\"preferred_action\":\"finalize_active_suggestion\",\"document_editable\":true},\"suggestion_info\":{\"has_active_suggestion\":true,\"active_suggestion\":{\"id\":1,\"key\":\"rule-wait-attachment\",\"description\":\"HAHHAHHAHAA\",\"has_user_modifications\":false,\"state\":\"active\"},\"handling\":{\"status\":\"active\",\"recommended_action\":\"finalize_active_suggestion\",\"instructions\":\"This document has an active accounting suggestion. Update the document directly only for manual bookkeeping changes. Use `finalize_active_suggestion` to apply the suggested accounting entries and finalize the draft.\"}},\"available_actions\":[{\"id\":\"edit_document\",\"method\":\"PATCH\",\"path\":\"/v1/mcp/business/demo-bfa195/documents/10/\",\"description\":\"Update the document directly.\",\"recommended\":false},{\"id\":\"finalize_active_suggestion\",\"method\":\"POST\",\"path\":\"/v1/mcp/business/demo-bfa195/documents/10/actions/finalize_active_suggestion/\",\"description\":\"Apply the active accounting suggestion and finalize the draft document.\",\"recommended\":true}]},{\"id\":9,\"number\":null,\"is_flagged\":false,\"is_locked\":false,\"is_draft\":true,\"date\":\"2025-07-31\",\"description\":\"\",\"contact_id\":null,\"contact_name\":null,\"balance\":17185.97,\"attachment_ids\":[],\"blueprint\":{\"debet_account_id\":null,\"debet_entries\":[],\"credit_account_id\":null,\"credit_entries\":[],\"expense_entries\":[]},\"tag_ids\":[],\"relations\":[],\"workflow\":{\"workflow_status\":\"draft_with_active_suggestion\",\"preferred_action\":\"finalize_active_suggestion\",\"document_editable\":true},\"suggestion_info\":{\"has_active_suggestion\":true,\"active_suggestion\":{\"id\":6,\"key\":\"ai-suggestion\",\"description\":\"Myyntituotot\",\"has_user_modifications\":false,\"state\":\"active\"},\"handling\":{\"status\":\"active\",\"recommended_action\":\"finalize_active_suggestion\",\"instructions\":\"This document has an active accounting suggestion. Update the document directly only for manual bookkeeping changes. Use `finalize_active_suggestion` to apply the suggested accounting entries and finalize the draft.\"}},\"available_actions\":[{\"id\":\"edit_document\",\"method\":\"PATCH\",\"path\":\"/v1/mcp/business/demo-bfa195/documents/9/\",\"description\":\"Update the document directly.\",\"recommended\":false},{\"id\":\"finalize_active_suggestion\",\"method\":\"POST\",\"path\":\"/v1/mcp/business/demo-bfa195/documents/9/actions/finalize_active_suggestion/\",\"description\":\"Apply the active accounting suggestion and finalize the draft document.\",\"recommended\":true}]},{\"id\":8,\"number\":null,\"is_flagged\":false,\"is_locked\":false,\"is_draft\":true,\"date\":\"2025-07-31\",\"description\":\"HAHHAHHAHAA\",\"contact_id\":null,\"contact_name\":null,\"balance\":-30.12,\"attachment_ids\":[],\"blueprint\":{\"debet_account_id\":null,\"debet_entries\":[{\"account_id\":22,\"description\":null,\"vat_code\":1,\"vat_rate\":25.5,\"vat_method\":0,\"amount\":30.12}],\"credit_account_id\":null,\"credit_entries\":[{\"account_id\":28,\"description\":null,\"vat_code\":5,\"vat_rate\":14.0,\"vat_method\":0,\"amount\":30.12}],\"expense_entries\":[]},\"tag_ids\":[],\"relations\":[],\"workflow\":{\"workflow_status\":\"draft_with_active_suggestion\",\"preferred_action\":\"finalize_active_suggestion\",\"document_editable\":true},\"suggestion_info\":{\"has_active_suggestion\":true,\"active_suggestion\":{\"id\":2,\"key\":\"rule-wait-attachment\",\"description\":\"HAHHAHHAHAA\",\"has_user_modifications\":false,\"state\":\"active\"},\"handling\":{\"status\":\"active\",\"recommended_action\":\"finalize_active_suggestion\",\"instructions\":\"This document has an active accounting suggestion. Update the document directly only for manual bookkeeping changes. Use `finalize_active_suggestion` to apply the suggested accounting entries and finalize the draft.\"}},\"available_actions\":[{\"id\":\"edit_document\",\"method\":\"PATCH\",\"path\":\"/v1/mcp/business/demo-bfa195/documents/8/\",\"description\":\"Update the document directly.\",\"recommended\":false},{\"id\":\"finalize_active_suggestion\",\"method\":\"POST\",\"path\":\"/v1/mcp/business/demo-bfa195/documents/8/actions/finalize_active_suggestion/\",\"description\":\"Apply the active accounting suggestion and finalize the draft document.\",\"recommended\":true}]},{\"id\":7,\"number\":null,\"is_flagged\":false,\"is_locked\":false,\"is_draft\":true,\"date\":\"2025-07-18\",\"description\":\"\",\"contact_id\":null,\"contact_name\":null,\"balance\":-3136.5,\"attachment_ids\":[],\"blueprint\":{\"debet_account_id\":null,\"debet_entries\":[],\"credit_account_id\":null,\"credit_entries\":[],\"expense_entries\":[]},\"tag_ids\":[],\"relations\":[],\"workflow\":{\"workflow_status\":\"draft_with_active_suggestion\",\"preferred_action\":\"finalize_active_suggestion\",\"document_editable\":true},\"suggestion_info\":{\"has_active_suggestion\":true,\"active_suggestion\":{\"id\":7,\"key\":\"ai-suggestion\",\"description\":\"Ennakkoverot\",\"has_user_modifications\":false,\"state\":\"active\"},\"handling\":{\"status\":\"active\",\"recommended_action\":\"finalize_active_suggestion\",\"instructions\":\"This document has an active accounting suggestion. Update the document directly only for manual bookkeeping changes. Use `finalize_active_suggestion` to apply the suggested accounting entries and finalize the draft.\"}},\"available_actions\":[{\"id\":\"edit_document\",\"method\":\"PATCH\",\"path\":\"/v1/mcp/business/demo-bfa195/documents/7/\",\"description\":\"Update the document directly.\",\"recommended\":false},{\"id\":\"finalize_active_suggestion\",\"method\":\"POST\",\"path\":\"/v1/mcp/business/demo-bfa195/documents/7/actions/finalize_active_suggestion/\",\"description\":\"Apply the active accounting suggestion and finalize the draft document.\",\"recommended\":true}]},{\"id\":6,\"number\":null,\"is_flagged\":false,\"is_locked\":false,\"is_draft\":true,\"date\":\"2025-07-10\",\"description\":\"HAHHAHHAHAA\",\"contact_id\":null,\"contact_name\":null,\"balance\":-24.0,\"attachment_ids\":[],\"blueprint\":{\"debet_account_id\":null,\"debet_entries\":[{\"account_id\":22,\"description\":null,\"vat_code\":1,\"vat_rate\":25.5,\"vat_method\":0,\"amount\":24.0}],\"credit_account_id\":null,\"credit_entries\":[{\"account_id\":28,\"description\":null,\"vat_code\":5,\"vat_rate\":14.0,\"vat_method\":0,\"amount\":24.0}],\"expense_entries\":[]},\"tag_ids\":[],\"relations\":[],\"workflow\":{\"workflow_status\":\"draft_with_active_suggestion\",\"preferred_action\":\"finalize_active_suggestion\",\"document_editable\":true},\"suggestion_info\":{\"has_active_suggestion\":true,\"active_suggestion\":{\"id\":4,\"key\":\"rule-wait-attachment\",\"description\":\"HAHHAHHAHAA\",\"has_user_modifications\":false,\"state\":\"active\"},\"handling\":{\"status\":\"active\",\"recommended_action\":\"finalize_active_suggestion\",\"instructions\":\"This document has an active accounting suggestion. Update the document directly only for manual bookkeeping changes. Use `finalize_active_suggestion` to apply the suggested accounting entries and finalize the draft.\"}},\"available_actions\":[{\"id\":\"edit_document\",\"method\":\"PATCH\",\"path\":\"/v1/mcp/business/demo-bfa195/documents/6/\",\"description\":\"Update the document directly.\",\"recommended\":false},{\"id\":\"finalize_active_suggestion\",\"method\":\"POST\",\"path\":\"/v1/mcp/business/demo-bfa195/documents/6/actions/finalize_active_suggestion/\",\"description\":\"Apply the active accounting suggestion and finalize the draft document.\",\"recommended\":true}]},{\"id\":5,\"number\":null,\"is_flagged\":false,\"is_locked\":false,\"is_draft\":true,\"date\":\"2025-07-03\",\"description\":\"HAHHAHHAHAA\",\"contact_id\":null,\"contact_name\":null,\"balance\":-2.65,\"attachment_ids\":[],\"blueprint\":{\"debet_account_id\":null,\"debet_entries\":[{\"account_id\":22,\"description\":null,\"vat_code\":1,\"vat_rate\":25.5,\"vat_method\":0,\"amount\":2.65}],\"credit_account_id\":null,\"credit_entries\":[{\"account_id\":28,\"description\":null,\"vat_code\":5,\"vat_rate\":14.0,\"vat_method\":0,\"amount\":2.65}],\"expense_entries\":[]},\"tag_ids\":[],\"relations\":[],\"workflow\":{\"workflow_status\":\"draft_with_active_suggestion\",\"preferred_action\":\"finalize_active_suggestion\",\"document_editable\":true},\"suggestion_info\":{\"has_active_suggestion\":true,\"active_suggestion\":{\"id\":3,\"key\":\"rule-wait-attachment\",\"description\":\"HAHHAHHAHAA\",\"has_user_modifications\":false,\"state\":\"active\"},\"handling\":{\"status\":\"active\",\"recommended_action\":\"finalize_active_suggestion\",\"instructions\":\"This document has an active accounting suggestion. Update the document directly only for manual bookkeeping changes. Use `finalize_active_suggestion` to apply the suggested accounting entries and finalize the draft.\"}},\"available_actions\":[{\"id\":\"edit_document\",\"method\":\"PATCH\",\"path\":\"/v1/mcp/business/demo-bfa195/documents/5/\",\"description\":\"Update the document directly.\",\"recommended\":false},{\"id\":\"finalize_active_suggestion\",\"method\":\"POST\",\"path\":\"/v1/mcp/business/demo-bfa195/documents/5/actions/finalize_active_suggestion/\",\"description\":\"Apply the active accounting suggestion and finalize the draft document.\",\"recommended\":true}]}]}"
+      ],
+      "data": {
+        "count": 9,
+        "next": null,
+        "prev": null,
+        "size": 9,
+        "results": [
+          {
+            "id": 13,
+            "number": null,
+            "is_flagged": false,
+            "is_locked": false,
+            "is_draft": true,
+            "date": "2026-04-02",
+            "description": "MCP draft with suggestion",
+            "contact_id": 1,
+            "contact_name": "MCP Test Contact f4d00c",
+            "balance": 10.0,
+            "attachment_ids": [],
+            "blueprint": {
+              "debet_account_id": null,
+              "debet_entries": [
+                {
+                  "account_id": 1,
+                  "description": null,
+                  "vat_code": 0,
+                  "vat_rate": 0.0,
+                  "vat_method": 0,
+                  "amount": 1.0
+                }
+              ],
+              "credit_account_id": null,
+              "credit_entries": [
+                {
+                  "account_id": 2,
+                  "description": null,
+                  "vat_code": 0,
+                  "vat_rate": 0.0,
+                  "vat_method": 0,
+                  "amount": 1.0
+                }
+              ],
+              "expense_entries": []
+            },
+            "tag_ids": [
+              3
+            ],
+            "relations": [],
+            "workflow": {
+              "workflow_status": "draft_with_active_suggestion",
+              "preferred_action": "finalize_active_suggestion",
+              "document_editable": true
+            },
+            "suggestion_info": {
+              "has_active_suggestion": true,
+              "active_suggestion": {
+                "id": 36,
+                "key": "ai-suggestion",
+                "description": "Seed suggestion",
+                "has_user_modifications": false,
+                "state": "active"
+              },
+              "handling": {
+                "status": "active",
+                "recommended_action": "finalize_active_suggestion",
+                "instructions": "This document has an active accounting suggestion. Update the document directly only for manual bookkeeping changes. Use `finalize_active_suggestion` to apply the suggested accounting entries and finalize the draft."
+              }
+            },
+            "available_actions": [
+              {
+                "id": "edit_document",
+                "method": "PATCH",
+                "path": "/v1/mcp/business/demo-bfa195/documents/13/",
+                "description": "Update the document directly.",
+                "recommended": false
+              },
+              {
+                "id": "finalize_active_suggestion",
+                "method": "POST",
+                "path": "/v1/mcp/business/demo-bfa195/documents/13/actions/finalize_active_suggestion/",
+                "description": "Apply the active accounting suggestion and finalize the draft document.",
+                "recommended": true
+              }
+            ]
+          },
+          {
+            "id": 12,
+            "number": "260402-1",
+            "is_flagged": false,
+            "is_locked": false,
+            "is_draft": false,
+            "date": "2026-04-02",
+            "description": "MCP draft no suggestion (updated via MCP test)",
+            "contact_id": 2,
+            "contact_name": "MCP Update Contact 37aaac",
+            "balance": 0.0,
+            "attachment_ids": [],
+            "blueprint": {
+              "debet_account_id": null,
+              "debet_entries": [
+                {
+                  "account_id": 1,
+                  "description": null,
+                  "vat_code": 0,
+                  "vat_rate": 0.0,
+                  "vat_method": 0,
+                  "amount": 1.0
+                }
+              ],
+              "credit_account_id": null,
+              "credit_entries": [
+                {
+                  "account_id": 2,
+                  "description": null,
+                  "vat_code": 0,
+                  "vat_rate": 0.0,
+                  "vat_method": 0,
+                  "amount": 1.0
+                }
+              ],
+              "expense_entries": []
+            },
+            "tag_ids": [
+              4
+            ],
+            "relations": [],
+            "workflow": {
+              "workflow_status": "finalized",
+              "preferred_action": "edit_document",
+              "document_editable": true
+            },
+            "suggestion_info": {
+              "has_active_suggestion": false,
+              "active_suggestion": null,
+              "handling": {
+                "status": "none",
+                "recommended_action": "edit_document",
+                "instructions": "No active accounting suggestion exists for this document. Update the document directly when changes are needed."
+              }
+            },
+            "available_actions": [
+              {
+                "id": "edit_document",
+                "method": "PATCH",
+                "path": "/v1/mcp/business/demo-bfa195/documents/12/",
+                "description": "Update the document directly.",
+                "recommended": true
+              }
+            ]
+          },
+          {
+            "id": 11,
+            "number": null,
+            "is_flagged": false,
+            "is_locked": false,
+            "is_draft": true,
+            "date": "2025-12-15",
+            "description": "Palkka Juho Enala",
+            "contact_id": null,
+            "contact_name": null,
+            "balance": -6537.25,
+            "attachment_ids": [],
+            "blueprint": {
+              "debet_account_id": null,
+              "debet_entries": [],
+              "credit_account_id": null,
+              "credit_entries": [],
+              "expense_entries": []
+            },
+            "tag_ids": [],
+            "relations": [],
+            "workflow": {
+              "workflow_status": "draft_with_active_suggestion",
+              "preferred_action": "finalize_active_suggestion",
+              "document_editable": true
+            },
+            "suggestion_info": {
+              "has_active_suggestion": true,
+              "active_suggestion": {
+                "id": 5,
+                "key": "ai-suggestion",
+                "description": "Työntekijäpalkat",
+                "has_user_modifications": false,
+                "state": "active"
+              },
+              "handling": {
+                "status": "active",
+                "recommended_action": "finalize_active_suggestion",
+                "instructions": "This document has an active accounting suggestion. Update the document directly only for manual bookkeeping changes. Use `finalize_active_suggestion` to apply the suggested accounting entries and finalize the draft."
+              }
+            },
+            "available_actions": [
+              {
+                "id": "edit_document",
+                "method": "PATCH",
+                "path": "/v1/mcp/business/demo-bfa195/documents/11/",
+                "description": "Update the document directly.",
+                "recommended": false
+              },
+              {
+                "id": "finalize_active_suggestion",
+                "method": "POST",
+                "path": "/v1/mcp/business/demo-bfa195/documents/11/actions/finalize_active_suggestion/",
+                "description": "Apply the active accounting suggestion and finalize the draft document.",
+                "recommended": true
+              }
+            ]
+          },
+          {
+            "id": 10,
+            "number": null,
+            "is_flagged": false,
+            "is_locked": false,
+            "is_draft": true,
+            "date": "2025-07-31",
+            "description": "HAHHAHHAHAA",
+            "contact_id": null,
+            "contact_name": null,
+            "balance": -6.9,
+            "attachment_ids": [],
+            "blueprint": {
+              "debet_account_id": null,
+              "debet_entries": [
+                {
+                  "account_id": 22,
+                  "description": null,
+                  "vat_code": 1,
+                  "vat_rate": 25.5,
+                  "vat_method": 0,
+                  "amount": 6.9
+                }
+              ],
+              "credit_account_id": null,
+              "credit_entries": [
+                {
+                  "account_id": 28,
+                  "description": null,
+                  "vat_code": 5,
+                  "vat_rate": 14.0,
+                  "vat_method": 0,
+                  "amount": 6.9
+                }
+              ],
+              "expense_entries": []
+            },
+            "tag_ids": [],
+            "relations": [],
+            "workflow": {
+              "workflow_status": "draft_with_active_suggestion",
+              "preferred_action": "finalize_active_suggestion",
+              "document_editable": true
+            },
+            "suggestion_info": {
+              "has_active_suggestion": true,
+              "active_suggestion": {
+                "id": 1,
+                "key": "rule-wait-attachment",
+                "description": "HAHHAHHAHAA",
+                "has_user_modifications": false,
+                "state": "active"
+              },
+              "handling": {
+                "status": "active",
+                "recommended_action": "finalize_active_suggestion",
+                "instructions": "This document has an active accounting suggestion. Update the document directly only for manual bookkeeping changes. Use `finalize_active_suggestion` to apply the suggested accounting entries and finalize the draft."
+              }
+            },
+            "available_actions": [
+              {
+                "id": "edit_document",
+                "method": "PATCH",
+                "path": "/v1/mcp/business/demo-bfa195/documents/10/",
+                "description": "Update the document directly.",
+                "recommended": false
+              },
+              {
+                "id": "finalize_active_suggestion",
+                "method": "POST",
+                "path": "/v1/mcp/business/demo-bfa195/documents/10/actions/finalize_active_suggestion/",
+                "description": "Apply the active accounting suggestion and finalize the draft document.",
+                "recommended": true
+              }
+            ]
+          },
+          {
+            "id": 9,
+            "number": null,
+            "is_flagged": false,
+            "is_locked": false,
+            "is_draft": true,
+            "date": "2025-07-31",
+            "description": "",
+            "contact_id": null,
+            "contact_name": null,
+            "balance": 17185.97,
+            "attachment_ids": [],
+            "blueprint": {
+              "debet_account_id": null,
+              "debet_entries": [],
+              "credit_account_id": null,
+              "credit_entries": [],
+              "expense_entries": []
+            },
+            "tag_ids": [],
+            "relations": [],
+            "workflow": {
+              "workflow_status": "draft_with_active_suggestion",
+              "preferred_action": "finalize_active_suggestion",
+              "document_editable": true
+            },
+            "suggestion_info": {
+              "has_active_suggestion": true,
+              "active_suggestion": {
+                "id": 6,
+                "key": "ai-suggestion",
+                "description": "Myyntituotot",
+                "has_user_modifications": false,
+                "state": "active"
+              },
+              "handling": {
+                "status": "active",
+                "recommended_action": "finalize_active_suggestion",
+                "instructions": "This document has an active accounting suggestion. Update the document directly only for manual bookkeeping changes. Use `finalize_active_suggestion` to apply the suggested accounting entries and finalize the draft."
+              }
+            },
+            "available_actions": [
+              {
+                "id": "edit_document",
+                "method": "PATCH",
+                "path": "/v1/mcp/business/demo-bfa195/documents/9/",
+                "description": "Update the document directly.",
+                "recommended": false
+              },
+              {
+                "id": "finalize_active_suggestion",
+                "method": "POST",
+                "path": "/v1/mcp/business/demo-bfa195/documents/9/actions/finalize_active_suggestion/",
+                "description": "Apply the active accounting suggestion and finalize the draft document.",
+                "recommended": true
+              }
+            ]
+          },
+          {
+            "id": 8,
+            "number": null,
+            "is_flagged": false,
+            "is_locked": false,
+            "is_draft": true,
+            "date": "2025-07-31",
+            "description": "HAHHAHHAHAA",
+            "contact_id": null,
+            "contact_name": null,
+            "balance": -30.12,
+            "attachment_ids": [],
+            "blueprint": {
+              "debet_account_id": null,
+              "debet_entries": [
+                {
+                  "account_id": 22,
+                  "description": null,
+                  "vat_code": 1,
+                  "vat_rate": 25.5,
+                  "vat_method": 0,
+                  "amount": 30.12
+                }
+              ],
+              "credit_account_id": null,
+              "credit_entries": [
+                {
+                  "account_id": 28,
+                  "description": null,
+                  "vat_code": 5,
+                  "vat_rate": 14.0,
+                  "vat_method": 0,
+                  "amount": 30.12
+                }
+              ],
+              "expense_entries": []
+            },
+            "tag_ids": [],
+            "relations": [],
+            "workflow": {
+              "workflow_status": "draft_with_active_suggestion",
+              "preferred_action": "finalize_active_suggestion",
+              "document_editable": true
+            },
+            "suggestion_info": {
+              "has_active_suggestion": true,
+              "active_suggestion": {
+                "id": 2,
+                "key": "rule-wait-attachment",
+                "description": "HAHHAHHAHAA",
+                "has_user_modifications": false,
+                "state": "active"
+              },
+              "handling": {
+                "status": "active",
+                "recommended_action": "finalize_active_suggestion",
+                "instructions": "This document has an active accounting suggestion. Update the document directly only for manual bookkeeping changes. Use `finalize_active_suggestion` to apply the suggested accounting entries and finalize the draft."
+              }
+            },
+            "available_actions": [
+              {
+                "id": "edit_document",
+                "method": "PATCH",
+                "path": "/v1/mcp/business/demo-bfa195/documents/8/",
+                "description": "Update the document directly.",
+                "recommended": false
+              },
+              {
+                "id": "finalize_active_suggestion",
+                "method": "POST",
+                "path": "/v1/mcp/business/demo-bfa195/documents/8/actions/finalize_active_suggestion/",
+                "description": "Apply the active accounting suggestion and finalize the draft document.",
+                "recommended": true
+              }
+            ]
+          },
+          {
+            "id": 7,
+            "number": null,
+            "is_flagged": false,
+            "is_locked": false,
+            "is_draft": true,
+            "date": "2025-07-18",
+            "description": "",
+            "contact_id": null,
+            "contact_name": null,
+            "balance": -3136.5,
+            "attachment_ids": [],
+            "blueprint": {
+              "debet_account_id": null,
+              "debet_entries": [],
+              "credit_account_id": null,
+              "credit_entries": [],
+              "expense_entries": []
+            },
+            "tag_ids": [],
+            "relations": [],
+            "workflow": {
+              "workflow_status": "draft_with_active_suggestion",
+              "preferred_action": "finalize_active_suggestion",
+              "document_editable": true
+            },
+            "suggestion_info": {
+              "has_active_suggestion": true,
+              "active_suggestion": {
+                "id": 7,
+                "key": "ai-suggestion",
+                "description": "Ennakkoverot",
+                "has_user_modifications": false,
+                "state": "active"
+              },
+              "handling": {
+                "status": "active",
+                "recommended_action": "finalize_active_suggestion",
+                "instructions": "This document has an active accounting suggestion. Update the document directly only for manual bookkeeping changes. Use `finalize_active_suggestion` to apply the suggested accounting entries and finalize the draft."
+              }
+            },
+            "available_actions": [
+              {
+                "id": "edit_document",
+                "method": "PATCH",
+                "path": "/v1/mcp/business/demo-bfa195/documents/7/",
+                "description": "Update the document directly.",
+                "recommended": false
+              },
+              {
+                "id": "finalize_active_suggestion",
+                "method": "POST",
+                "path": "/v1/mcp/business/demo-bfa195/documents/7/actions/finalize_active_suggestion/",
+                "description": "Apply the active accounting suggestion and finalize the draft document.",
+                "recommended": true
+              }
+            ]
+          },
+          {
+            "id": 6,
+            "number": null,
+            "is_flagged": false,
+            "is_locked": false,
+            "is_draft": true,
+            "date": "2025-07-10",
+            "description": "HAHHAHHAHAA",
+            "contact_id": null,
+            "contact_name": null,
+            "balance": -24.0,
+            "attachment_ids": [],
+            "blueprint": {
+              "debet_account_id": null,
+              "debet_entries": [
+                {
+                  "account_id": 22,
+                  "description": null,
+                  "vat_code": 1,
+                  "vat_rate": 25.5,
+                  "vat_method": 0,
+                  "amount": 24.0
+                }
+              ],
+              "credit_account_id": null,
+              "credit_entries": [
+                {
+                  "account_id": 28,
+                  "description": null,
+                  "vat_code": 5,
+                  "vat_rate": 14.0,
+                  "vat_method": 0,
+                  "amount": 24.0
+                }
+              ],
+              "expense_entries": []
+            },
+            "tag_ids": [],
+            "relations": [],
+            "workflow": {
+              "workflow_status": "draft_with_active_suggestion",
+              "preferred_action": "finalize_active_suggestion",
+              "document_editable": true
+            },
+            "suggestion_info": {
+              "has_active_suggestion": true,
+              "active_suggestion": {
+                "id": 4,
+                "key": "rule-wait-attachment",
+                "description": "HAHHAHHAHAA",
+                "has_user_modifications": false,
+                "state": "active"
+              },
+              "handling": {
+                "status": "active",
+                "recommended_action": "finalize_active_suggestion",
+                "instructions": "This document has an active accounting suggestion. Update the document directly only for manual bookkeeping changes. Use `finalize_active_suggestion` to apply the suggested accounting entries and finalize the draft."
+              }
+            },
+            "available_actions": [
+              {
+                "id": "edit_document",
+                "method": "PATCH",
+                "path": "/v1/mcp/business/demo-bfa195/documents/6/",
+                "description": "Update the document directly.",
+                "recommended": false
+              },
+              {
+                "id": "finalize_active_suggestion",
+                "method": "POST",
+                "path": "/v1/mcp/business/demo-bfa195/documents/6/actions/finalize_active_suggestion/",
+                "description": "Apply the active accounting suggestion and finalize the draft document.",
+                "recommended": true
+              }
+            ]
+          },
+          {
+            "id": 5,
+            "number": null,
+            "is_flagged": false,
+            "is_locked": false,
+            "is_draft": true,
+            "date": "2025-07-03",
+            "description": "HAHHAHHAHAA",
+            "contact_id": null,
+            "contact_name": null,
+            "balance": -2.65,
+            "attachment_ids": [],
+            "blueprint": {
+              "debet_account_id": null,
+              "debet_entries": [
+                {
+                  "account_id": 22,
+                  "description": null,
+                  "vat_code": 1,
+                  "vat_rate": 25.5,
+                  "vat_method": 0,
+                  "amount": 2.65
+                }
+              ],
+              "credit_account_id": null,
+              "credit_entries": [
+                {
+                  "account_id": 28,
+                  "description": null,
+                  "vat_code": 5,
+                  "vat_rate": 14.0,
+                  "vat_method": 0,
+                  "amount": 2.65
+                }
+              ],
+              "expense_entries": []
+            },
+            "tag_ids": [],
+            "relations": [],
+            "workflow": {
+              "workflow_status": "draft_with_active_suggestion",
+              "preferred_action": "finalize_active_suggestion",
+              "document_editable": true
+            },
+            "suggestion_info": {
+              "has_active_suggestion": true,
+              "active_suggestion": {
+                "id": 3,
+                "key": "rule-wait-attachment",
+                "description": "HAHHAHHAHAA",
+                "has_user_modifications": false,
+                "state": "active"
+              },
+              "handling": {
+                "status": "active",
+                "recommended_action": "finalize_active_suggestion",
+                "instructions": "This document has an active accounting suggestion. Update the document directly only for manual bookkeeping changes. Use `finalize_active_suggestion` to apply the suggested accounting entries and finalize the draft."
+              }
+            },
+            "available_actions": [
+              {
+                "id": "edit_document",
+                "method": "PATCH",
+                "path": "/v1/mcp/business/demo-bfa195/documents/5/",
+                "description": "Update the document directly.",
+                "recommended": false
+              },
+              {
+                "id": "finalize_active_suggestion",
+                "method": "POST",
+                "path": "/v1/mcp/business/demo-bfa195/documents/5/actions/finalize_active_suggestion/",
+                "description": "Apply the active accounting suggestion and finalize the draft document.",
+                "recommended": true
+              }
+            ]
+          }
+        ]
+      },
+      "exception": null
+    },
+    "bookkeeping_document_retrieve_no": {
+      "tool": "bookkeeping_document_retrieve",
+      "args": {
+        "business_slug": "demo-bfa195",
+        "document_id": 12
+      },
+      "ok": true,
+      "is_error": false,
+      "raw_text": [
+        "{\"id\":12,\"number\":\"260402-1\",\"is_flagged\":false,\"is_locked\":false,\"is_draft\":false,\"date\":\"2026-04-02\",\"description\":\"MCP draft no suggestion (updated via MCP test)\",\"contact_id\":2,\"contact_name\":\"MCP Update Contact 37aaac\",\"balance\":0.0,\"attachment_ids\":[],\"blueprint\":{\"debet_account_id\":null,\"debet_entries\":[{\"account_id\":1,\"description\":null,\"vat_code\":0,\"vat_rate\":0.0,\"vat_method\":0,\"amount\":1.0}],\"credit_account_id\":null,\"credit_entries\":[{\"account_id\":2,\"description\":null,\"vat_code\":0,\"vat_rate\":0.0,\"vat_method\":0,\"amount\":1.0}],\"expense_entries\":[]},\"tag_ids\":[4],\"relations\":[],\"workflow\":{\"workflow_status\":\"finalized\",\"preferred_action\":\"edit_document\",\"document_editable\":true},\"suggestion_info\":{\"has_active_suggestion\":false,\"active_suggestion\":null,\"handling\":{\"status\":\"none\",\"recommended_action\":\"edit_document\",\"instructions\":\"No active accounting suggestion exists for this document. Update the document directly when changes are needed.\"}},\"available_actions\":[{\"id\":\"edit_document\",\"method\":\"PATCH\",\"path\":\"/v1/mcp/business/demo-bfa195/documents/12/\",\"description\":\"Update the document directly.\",\"recommended\":true}]}"
+      ],
+      "data": {
+        "id": 12,
+        "number": "260402-1",
+        "is_flagged": false,
+        "is_locked": false,
+        "is_draft": false,
+        "date": "2026-04-02",
+        "description": "MCP draft no suggestion (updated via MCP test)",
+        "contact_id": 2,
+        "contact_name": "MCP Update Contact 37aaac",
+        "balance": 0.0,
+        "attachment_ids": [],
+        "blueprint": {
+          "debet_account_id": null,
+          "debet_entries": [
+            {
+              "account_id": 1,
+              "description": null,
+              "vat_code": 0,
+              "vat_rate": 0.0,
+              "vat_method": 0,
+              "amount": 1.0
+            }
+          ],
+          "credit_account_id": null,
+          "credit_entries": [
+            {
+              "account_id": 2,
+              "description": null,
+              "vat_code": 0,
+              "vat_rate": 0.0,
+              "vat_method": 0,
+              "amount": 1.0
+            }
+          ],
+          "expense_entries": []
+        },
+        "tag_ids": [
+          4
+        ],
+        "relations": [],
+        "workflow": {
+          "workflow_status": "finalized",
+          "preferred_action": "edit_document",
+          "document_editable": true
+        },
+        "suggestion_info": {
+          "has_active_suggestion": false,
+          "active_suggestion": null,
+          "handling": {
+            "status": "none",
+            "recommended_action": "edit_document",
+            "instructions": "No active accounting suggestion exists for this document. Update the document directly when changes are needed."
+          }
+        },
+        "available_actions": [
+          {
+            "id": "edit_document",
+            "method": "PATCH",
+            "path": "/v1/mcp/business/demo-bfa195/documents/12/",
+            "description": "Update the document directly.",
+            "recommended": true
+          }
+        ]
+      },
+      "exception": null
+    },
+    "bookkeeping_document_retrieve_with": {
+      "tool": "bookkeeping_document_retrieve",
+      "args": {
+        "business_slug": "demo-bfa195",
+        "document_id": 13
+      },
+      "ok": true,
+      "is_error": false,
+      "raw_text": [
+        "{\"id\":13,\"number\":null,\"is_flagged\":false,\"is_locked\":false,\"is_draft\":true,\"date\":\"2026-04-02\",\"description\":\"MCP draft with suggestion\",\"contact_id\":1,\"contact_name\":\"MCP Test Contact f4d00c\",\"balance\":10.0,\"attachment_ids\":[],\"blueprint\":{\"debet_account_id\":null,\"debet_entries\":[{\"account_id\":1,\"description\":null,\"vat_code\":0,\"vat_rate\":0.0,\"vat_method\":0,\"amount\":1.0}],\"credit_account_id\":null,\"credit_entries\":[{\"account_id\":2,\"description\":null,\"vat_code\":0,\"vat_rate\":0.0,\"vat_method\":0,\"amount\":1.0}],\"expense_entries\":[]},\"tag_ids\":[3],\"relations\":[],\"workflow\":{\"workflow_status\":\"draft_with_active_suggestion\",\"preferred_action\":\"finalize_active_suggestion\",\"document_editable\":true},\"suggestion_info\":{\"has_active_suggestion\":true,\"active_suggestion\":{\"id\":36,\"key\":\"ai-suggestion\",\"description\":\"Seed suggestion\",\"has_user_modifications\":false,\"state\":\"active\"},\"handling\":{\"status\":\"active\",\"recommended_action\":\"finalize_active_suggestion\",\"instructions\":\"This document has an active accounting suggestion. Update the document directly only for manual bookkeeping changes. Use `finalize_active_suggestion` to apply the suggested accounting entries and finalize the draft.\"}},\"available_actions\":[{\"id\":\"edit_document\",\"method\":\"PATCH\",\"path\":\"/v1/mcp/business/demo-bfa195/documents/13/\",\"description\":\"Update the document directly.\",\"recommended\":false},{\"id\":\"finalize_active_suggestion\",\"method\":\"POST\",\"path\":\"/v1/mcp/business/demo-bfa195/documents/13/actions/finalize_active_suggestion/\",\"description\":\"Apply the active accounting suggestion and finalize the draft document.\",\"recommended\":true}]}"
+      ],
+      "data": {
+        "id": 13,
+        "number": null,
+        "is_flagged": false,
+        "is_locked": false,
+        "is_draft": true,
+        "date": "2026-04-02",
+        "description": "MCP draft with suggestion",
+        "contact_id": 1,
+        "contact_name": "MCP Test Contact f4d00c",
+        "balance": 10.0,
+        "attachment_ids": [],
+        "blueprint": {
+          "debet_account_id": null,
+          "debet_entries": [
+            {
+              "account_id": 1,
+              "description": null,
+              "vat_code": 0,
+              "vat_rate": 0.0,
+              "vat_method": 0,
+              "amount": 1.0
+            }
+          ],
+          "credit_account_id": null,
+          "credit_entries": [
+            {
+              "account_id": 2,
+              "description": null,
+              "vat_code": 0,
+              "vat_rate": 0.0,
+              "vat_method": 0,
+              "amount": 1.0
+            }
+          ],
+          "expense_entries": []
+        },
+        "tag_ids": [
+          3
+        ],
+        "relations": [],
+        "workflow": {
+          "workflow_status": "draft_with_active_suggestion",
+          "preferred_action": "finalize_active_suggestion",
+          "document_editable": true
+        },
+        "suggestion_info": {
+          "has_active_suggestion": true,
+          "active_suggestion": {
+            "id": 36,
+            "key": "ai-suggestion",
+            "description": "Seed suggestion",
+            "has_user_modifications": false,
+            "state": "active"
+          },
+          "handling": {
+            "status": "active",
+            "recommended_action": "finalize_active_suggestion",
+            "instructions": "This document has an active accounting suggestion. Update the document directly only for manual bookkeeping changes. Use `finalize_active_suggestion` to apply the suggested accounting entries and finalize the draft."
+          }
+        },
+        "available_actions": [
+          {
+            "id": "edit_document",
+            "method": "PATCH",
+            "path": "/v1/mcp/business/demo-bfa195/documents/13/",
+            "description": "Update the document directly.",
+            "recommended": false
+          },
+          {
+            "id": "finalize_active_suggestion",
+            "method": "POST",
+            "path": "/v1/mcp/business/demo-bfa195/documents/13/actions/finalize_active_suggestion/",
+            "description": "Apply the active accounting suggestion and finalize the draft document.",
+            "recommended": true
+          }
+        ]
+      },
+      "exception": null
+    },
+    "bookkeeping_document_update": {
+      "tool": "bookkeeping_document_update",
+      "args": {
+        "business_slug": "demo-bfa195",
+        "document_id": 12,
+        "description": "MCP draft no suggestion (updated via MCP test)",
+        "contact_id": 2,
+        "tag_ids": [
+          4
+        ]
+      },
+      "ok": true,
+      "is_error": false,
+      "raw_text": [
+        "{\"id\":12,\"number\":\"260402-1\",\"is_flagged\":false,\"is_locked\":false,\"is_draft\":false,\"date\":\"2026-04-02\",\"description\":\"MCP draft no suggestion (updated via MCP test)\",\"contact_id\":2,\"contact_name\":\"MCP Update Contact 37aaac\",\"balance\":0.0,\"attachment_ids\":[],\"blueprint\":{\"debet_account_id\":null,\"debet_entries\":[{\"account_id\":1,\"description\":null,\"vat_code\":0,\"vat_rate\":0.0,\"vat_method\":0,\"amount\":1.0}],\"credit_account_id\":null,\"credit_entries\":[{\"account_id\":2,\"description\":null,\"vat_code\":0,\"vat_rate\":0.0,\"vat_method\":0,\"amount\":1.0}],\"expense_entries\":[]},\"tag_ids\":[4],\"relations\":[],\"workflow\":{\"workflow_status\":\"finalized\",\"preferred_action\":\"edit_document\",\"document_editable\":true},\"suggestion_info\":{\"has_active_suggestion\":false,\"active_suggestion\":null,\"handling\":{\"status\":\"none\",\"recommended_action\":\"edit_document\",\"instructions\":\"No active accounting suggestion exists for this document. Update the document directly when changes are needed.\"}},\"available_actions\":[{\"id\":\"edit_document\",\"method\":\"PATCH\",\"path\":\"/v1/mcp/business/demo-bfa195/documents/12/\",\"description\":\"Update the document directly.\",\"recommended\":true}]}"
+      ],
+      "data": {
+        "id": 12,
+        "number": "260402-1",
+        "is_flagged": false,
+        "is_locked": false,
+        "is_draft": false,
+        "date": "2026-04-02",
+        "description": "MCP draft no suggestion (updated via MCP test)",
+        "contact_id": 2,
+        "contact_name": "MCP Update Contact 37aaac",
+        "balance": 0.0,
+        "attachment_ids": [],
+        "blueprint": {
+          "debet_account_id": null,
+          "debet_entries": [
+            {
+              "account_id": 1,
+              "description": null,
+              "vat_code": 0,
+              "vat_rate": 0.0,
+              "vat_method": 0,
+              "amount": 1.0
+            }
+          ],
+          "credit_account_id": null,
+          "credit_entries": [
+            {
+              "account_id": 2,
+              "description": null,
+              "vat_code": 0,
+              "vat_rate": 0.0,
+              "vat_method": 0,
+              "amount": 1.0
+            }
+          ],
+          "expense_entries": []
+        },
+        "tag_ids": [
+          4
+        ],
+        "relations": [],
+        "workflow": {
+          "workflow_status": "finalized",
+          "preferred_action": "edit_document",
+          "document_editable": true
+        },
+        "suggestion_info": {
+          "has_active_suggestion": false,
+          "active_suggestion": null,
+          "handling": {
+            "status": "none",
+            "recommended_action": "edit_document",
+            "instructions": "No active accounting suggestion exists for this document. Update the document directly when changes are needed."
+          }
+        },
+        "available_actions": [
+          {
+            "id": "edit_document",
+            "method": "PATCH",
+            "path": "/v1/mcp/business/demo-bfa195/documents/12/",
+            "description": "Update the document directly.",
+            "recommended": true
+          }
+        ]
+      },
+      "exception": null
+    },
+    "bookkeeping_document_finalize_active_suggestion_error": {
+      "tool": "bookkeeping_document_finalize_active_suggestion",
+      "args": {
+        "business_slug": "demo-bfa195",
+        "document_id": 12
+      },
+      "ok": false,
+      "is_error": true,
+      "data": null,
+      "raw_text": [],
+      "exception": "{\"tool\": \"bookkeeping_document_finalize_active_suggestion\", \"error_type\": \"bad_request\", \"summary\": \"No active suggestion found for the selected document.\", \"status_code\": 400, \"hint\": \"Review the tool arguments and required fields.\"}"
+    },
+    "bookkeeping_document_finalize_active_suggestion_success": {
+      "tool": "bookkeeping_document_finalize_active_suggestion",
+      "args": {
+        "business_slug": "demo-bfa195",
+        "document_id": 13
+      },
+      "ok": true,
+      "is_error": false,
+      "raw_text": [
+        "{\"id\":13,\"number\":\"260402-2\",\"is_flagged\":false,\"is_locked\":false,\"is_draft\":false,\"date\":\"2026-04-02\",\"description\":\"Seed suggestion\",\"contact_id\":null,\"contact_name\":null,\"balance\":0.0,\"attachment_ids\":[],\"blueprint\":{\"debet_account_id\":null,\"debet_entries\":[{\"account_id\":1,\"description\":null,\"vat_code\":0,\"vat_rate\":0.0,\"vat_method\":0,\"amount\":1.0}],\"credit_account_id\":null,\"credit_entries\":[{\"account_id\":2,\"description\":null,\"vat_code\":0,\"vat_rate\":0.0,\"vat_method\":0,\"amount\":1.0}],\"expense_entries\":[]},\"tag_ids\":[],\"relations\":[],\"workflow\":{\"workflow_status\":\"finalized\",\"preferred_action\":\"edit_document\",\"document_editable\":true},\"suggestion_info\":{\"has_active_suggestion\":false,\"active_suggestion\":null,\"handling\":{\"status\":\"none\",\"recommended_action\":\"edit_document\",\"instructions\":\"No active accounting suggestion exists for this document. Update the document directly when changes are needed.\"}},\"available_actions\":[{\"id\":\"edit_document\",\"method\":\"PATCH\",\"path\":\"/v1/mcp/business/demo-bfa195/documents/13/\",\"description\":\"Update the document directly.\",\"recommended\":true}]}"
+      ],
+      "data": {
+        "id": 13,
+        "number": "260402-2",
+        "is_flagged": false,
+        "is_locked": false,
+        "is_draft": false,
+        "date": "2026-04-02",
+        "description": "Seed suggestion",
+        "contact_id": null,
+        "contact_name": null,
+        "balance": 0.0,
+        "attachment_ids": [],
+        "blueprint": {
+          "debet_account_id": null,
+          "debet_entries": [
+            {
+              "account_id": 1,
+              "description": null,
+              "vat_code": 0,
+              "vat_rate": 0.0,
+              "vat_method": 0,
+              "amount": 1.0
+            }
+          ],
+          "credit_account_id": null,
+          "credit_entries": [
+            {
+              "account_id": 2,
+              "description": null,
+              "vat_code": 0,
+              "vat_rate": 0.0,
+              "vat_method": 0,
+              "amount": 1.0
+            }
+          ],
+          "expense_entries": []
+        },
+        "tag_ids": [],
+        "relations": [],
+        "workflow": {
+          "workflow_status": "finalized",
+          "preferred_action": "edit_document",
+          "document_editable": true
+        },
+        "suggestion_info": {
+          "has_active_suggestion": false,
+          "active_suggestion": null,
+          "handling": {
+            "status": "none",
+            "recommended_action": "edit_document",
+            "instructions": "No active accounting suggestion exists for this document. Update the document directly when changes are needed."
+          }
+        },
+        "available_actions": [
+          {
+            "id": "edit_document",
+            "method": "PATCH",
+            "path": "/v1/mcp/business/demo-bfa195/documents/13/",
+            "description": "Update the document directly.",
+            "recommended": true
+          }
+        ]
+      },
+      "exception": null
+    },
+    "bookkeeping_document_retrieve_with_after_finalize": {
+      "tool": "bookkeeping_document_retrieve",
+      "args": {
+        "business_slug": "demo-bfa195",
+        "document_id": 13
+      },
+      "ok": true,
+      "is_error": false,
+      "raw_text": [
+        "{\"id\":13,\"number\":\"260402-2\",\"is_flagged\":false,\"is_locked\":false,\"is_draft\":false,\"date\":\"2026-04-02\",\"description\":\"Seed suggestion\",\"contact_id\":null,\"contact_name\":null,\"balance\":0.0,\"attachment_ids\":[],\"blueprint\":{\"debet_account_id\":null,\"debet_entries\":[{\"account_id\":1,\"description\":null,\"vat_code\":0,\"vat_rate\":0.0,\"vat_method\":0,\"amount\":1.0}],\"credit_account_id\":null,\"credit_entries\":[{\"account_id\":2,\"description\":null,\"vat_code\":0,\"vat_rate\":0.0,\"vat_method\":0,\"amount\":1.0}],\"expense_entries\":[]},\"tag_ids\":[],\"relations\":[],\"workflow\":{\"workflow_status\":\"finalized\",\"preferred_action\":\"edit_document\",\"document_editable\":true},\"suggestion_info\":{\"has_active_suggestion\":false,\"active_suggestion\":null,\"handling\":{\"status\":\"none\",\"recommended_action\":\"edit_document\",\"instructions\":\"No active accounting suggestion exists for this document. Update the document directly when changes are needed.\"}},\"available_actions\":[{\"id\":\"edit_document\",\"method\":\"PATCH\",\"path\":\"/v1/mcp/business/demo-bfa195/documents/13/\",\"description\":\"Update the document directly.\",\"recommended\":true}]}"
+      ],
+      "data": {
+        "id": 13,
+        "number": "260402-2",
+        "is_flagged": false,
+        "is_locked": false,
+        "is_draft": false,
+        "date": "2026-04-02",
+        "description": "Seed suggestion",
+        "contact_id": null,
+        "contact_name": null,
+        "balance": 0.0,
+        "attachment_ids": [],
+        "blueprint": {
+          "debet_account_id": null,
+          "debet_entries": [
+            {
+              "account_id": 1,
+              "description": null,
+              "vat_code": 0,
+              "vat_rate": 0.0,
+              "vat_method": 0,
+              "amount": 1.0
+            }
+          ],
+          "credit_account_id": null,
+          "credit_entries": [
+            {
+              "account_id": 2,
+              "description": null,
+              "vat_code": 0,
+              "vat_rate": 0.0,
+              "vat_method": 0,
+              "amount": 1.0
+            }
+          ],
+          "expense_entries": []
+        },
+        "tag_ids": [],
+        "relations": [],
+        "workflow": {
+          "workflow_status": "finalized",
+          "preferred_action": "edit_document",
+          "document_editable": true
+        },
+        "suggestion_info": {
+          "has_active_suggestion": false,
+          "active_suggestion": null,
+          "handling": {
+            "status": "none",
+            "recommended_action": "edit_document",
+            "instructions": "No active accounting suggestion exists for this document. Update the document directly when changes are needed."
+          }
+        },
+        "available_actions": [
+          {
+            "id": "edit_document",
+            "method": "PATCH",
+            "path": "/v1/mcp/business/demo-bfa195/documents/13/",
+            "description": "Update the document directly.",
+            "recommended": true
+          }
+        ]
+      },
+      "exception": null
+    }
+  },
+  "checks": {
+    "openapi_required_operations_present": {
+      "missing": [],
+      "present": [
+        "bookkeeping.documents.list",
+        "bookkeeping.document.retrieve",
+        "bookkeeping.document.update",
+        "bookkeeping.document.finalize_active_suggestion",
+        "common.bootstrap.retrieve",
+        "common.accessible_businesses.list",
+        "common.business_permissions.retrieve",
+        "common.server_instructions.retrieve",
+        "bookkeeping.blueprint.retrieve"
+      ]
+    },
+    "documents_found_in_list": {
+      "doc_no": true,
+      "doc_with": true,
+      "list_count": 9
+    },
+    "assertions": {
+      "draft_no_status": "finalized",
+      "draft_no_has_active": false,
+      "draft_no_recommended": "edit_document",
+      "draft_no_actions": [
+        "edit_document"
+      ],
+      "draft_with_status": "draft_with_active_suggestion",
+      "draft_with_has_active": true,
+      "draft_with_active_id": 36,
+      "draft_with_recommended": "finalize_active_suggestion",
+      "draft_with_actions": [
+        "edit_document",
+        "finalize_active_suggestion"
+      ],
+      "update_ok": true,
+      "update_description": "MCP draft no suggestion (updated via MCP test)",
+      "update_contact_id": 2,
+      "update_tag_ids": [
+        4
+      ],
+      "update_preferred_action": "edit_document",
+      "update_recommended_action": "edit_document",
+      "update_recommended_flags": {
+        "edit_document": true
+      },
+      "finalize_error_ok": false,
+      "finalize_error_exception": "{\"tool\": \"bookkeeping_document_finalize_active_suggestion\", \"error_type\": \"bad_request\", \"summary\": \"No active suggestion found for the selected document.\", \"status_code\": 400, \"hint\": \"Review the tool arguments and required fields.\"}",
+      "finalize_success_ok": true,
+      "finalize_success_is_draft": false,
+      "finalize_success_status": "finalized",
+      "finalize_success_has_active": false,
+      "finalize_success_active": null,
+      "post_finalize_is_draft": false,
+      "post_finalize_status": "finalized",
+      "post_finalize_has_active": false,
+      "post_finalize_active": null,
+      "consistency_doc_no": {
+        "preferred_action": "edit_document",
+        "recommended_action": "edit_document",
+        "preferred_marked_recommended": true,
+        "actions": {
+          "edit_document": true
+        }
+      },
+      "consistency_doc_with": {
+        "preferred_action": "finalize_active_suggestion",
+        "recommended_action": "finalize_active_suggestion",
+        "preferred_marked_recommended": true,
+        "actions": {
+          "edit_document": false,
+          "finalize_active_suggestion": true
+        }
+      },
+      "consistency_update_response": {
+        "preferred_action": "edit_document",
+        "recommended_action": "edit_document",
+        "preferred_marked_recommended": true,
+        "actions": {
+          "edit_document": true
+        }
+      },
+      "openapi_mentions_workflow_status": true,
+      "openapi_mentions_preferred_action": true,
+      "openapi_mentions_recommended_action": true,
+      "openapi_mentions_finalize_active_suggestion": true
+    }
+  }
+}
