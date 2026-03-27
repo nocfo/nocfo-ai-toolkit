@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 
+import nocfo_toolkit.cli.app as cli_app_module
 from nocfo_toolkit.cli.app import app
 from typer.testing import CliRunner
 
@@ -47,3 +48,49 @@ def test_missing_token_error_guides_user(monkeypatch, tmp_path) -> None:
     combined_output = result.output + getattr(result, "stderr", "")
     assert "NOCFO_API_TOKEN" in combined_output
     assert "nocfo auth configure" in combined_output
+
+
+def test_mcp_watch_requires_local_base_url() -> None:
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "--base-url",
+            "https://api-prd.nocfo.io",
+            "mcp",
+            "--transport",
+            "http",
+            "--watch",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "local backend base URL" in result.output
+
+
+def test_mcp_watch_delegates_to_watch_runner(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_watch_runner(**kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(cli_app_module, "_run_mcp_with_watch", _fake_watch_runner)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "--base-url",
+            "http://localhost:8000",
+            "mcp",
+            "--transport",
+            "http",
+            "--watch",
+            "--watch-path",
+            "src",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured["transport"] == "http"
+    assert captured["watch_paths"] == ["src"]
