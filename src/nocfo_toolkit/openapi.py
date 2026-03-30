@@ -10,12 +10,16 @@ from typing import Any
 import httpx
 
 CACHE_PATH = Path.home() / ".cache" / "nocfo-cli" / "openapi.json"
+MCP_TAG = "MCP"
+MCP_RESOURCE_TAG = "MCP_RESOURCE"
+MCP_TOOL_TAG = "MCP_TOOL"
+X_MCP_COMPONENT_TYPE = "x-mcp-component-type"
 
 
 def load_openapi_spec(
     *,
     base_url: str,
-    openapi_path: str = "/openapi/",
+    openapi_path: str = "/openapi-mcp/",
     cache_path: Path | None = None,
     timeout: float = 30.0,
     max_attempts: int = 6,
@@ -48,8 +52,17 @@ def load_openapi_spec(
     ) from last_error
 
 
-def filter_mcp_spec(spec: dict[str, Any], mcp_tag: str = "MCP") -> dict[str, Any]:
-    """Return spec containing only MCP-visible operations."""
+def _classify_mcp_operation(method: str, operation: dict[str, Any]) -> str:
+    component_type = operation.get(X_MCP_COMPONENT_TYPE)
+    if component_type == "resource":
+        return MCP_RESOURCE_TAG
+    if component_type == "tool":
+        return MCP_TOOL_TAG
+    return MCP_TOOL_TAG
+
+
+def filter_mcp_spec(spec: dict[str, Any], mcp_tag: str = MCP_TAG) -> dict[str, Any]:
+    """Return MCP-only OpenAPI with explicit resource/tool classification tags."""
 
     filtered_paths: dict[str, Any] = {}
     for path, methods in spec.get("paths", {}).items():
@@ -60,12 +73,16 @@ def filter_mcp_spec(spec: dict[str, Any], mcp_tag: str = "MCP") -> dict[str, Any
             if not isinstance(meta, dict):
                 continue
 
-            tags = meta.get("tags", [])
+            tags = list(meta.get("tags", []))
             if mcp_tag not in tags:
                 continue
-            if meta.get("x-mcp-exclude") is True:
-                continue
-            kept_methods[method] = meta
+
+            classified_operation = dict(meta)
+            classification_tag = _classify_mcp_operation(method, classified_operation)
+            classified_operation["tags"] = list(
+                dict.fromkeys([*tags, classification_tag])
+            )
+            kept_methods[method] = classified_operation
         if kept_methods:
             filtered_paths[path] = kept_methods
 

@@ -81,7 +81,11 @@ def test_load_openapi_spec_raises_when_network_and_cache_fail(
         )
 
 
-def test_filter_mcp_spec_excludes_operations_marked_hidden_for_mcp() -> None:
+def test_filter_mcp_spec_keeps_mcp_tagged_operations_ignores_legacy_x_mcp_exclude() -> (
+    None
+):
+    """OpenAPI may still carry x-mcp-exclude; the toolkit filter only gates on MCP tag."""
+
     spec = {
         "paths": {
             "/v1/business/{slug}/account/{id}/": {
@@ -102,7 +106,7 @@ def test_filter_mcp_spec_excludes_operations_marked_hidden_for_mcp() -> None:
     methods = filtered["paths"]["/v1/business/{slug}/account/{id}/"]
 
     assert "patch" in methods
-    assert "put" not in methods
+    assert "put" in methods
 
 
 def test_filter_mcp_spec_keeps_mcp_operation_without_exclude_marker() -> None:

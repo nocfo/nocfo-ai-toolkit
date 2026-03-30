@@ -182,6 +182,28 @@ def test_create_server_oauth_mode_requires_public_base_url(monkeypatch) -> None:
         create_server(config, options=MCPServerOptions(auth_mode="oauth"))
 
 
+def _minimal_openapi_spec_with_get_and_post(base_url: str) -> dict[str, object]:
+    return {
+        "openapi": "3.0.0",
+        "info": {"title": "NoCFO", "version": "1.0.0"},
+        "servers": [{"url": base_url}],
+        "paths": {
+            "/v1/example/": {
+                "get": {
+                    "operationId": "example_read",
+                    "tags": ["MCP"],
+                    "responses": {"200": {"description": "OK"}},
+                },
+                "post": {
+                    "operationId": "example_create",
+                    "tags": ["MCP"],
+                    "responses": {"200": {"description": "OK"}},
+                },
+            }
+        },
+    }
+
+
 def test_create_server_oauth_mode_adds_tool_auth_metadata(monkeypatch) -> None:
     config = ToolkitConfig(
         api_token=None,
@@ -191,7 +213,7 @@ def test_create_server_oauth_mode_adds_tool_auth_metadata(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         "nocfo_toolkit.mcp.server.load_openapi_spec",
-        _minimal_openapi_spec,
+        _minimal_openapi_spec_with_get_and_post,
     )
     monkeypatch.setenv("NOCFO_MCP_JWKS_URI", "https://login.nocfo.io/jwks.json")
 
@@ -204,11 +226,14 @@ def test_create_server_oauth_mode_adds_tool_auth_metadata(monkeypatch) -> None:
         ),
     )
     tools = asyncio.run(server.list_tools())
-    assert len(tools) == 1
-    meta = tools[0].meta or {}
-    assert meta["mcp/www_authenticate"] == "Bearer"
-    assert meta["securitySchemes"][0]["type"] == "oauth2"
-    assert meta["securitySchemes"][0]["scopes"] == ["read"]
+    resources = asyncio.run(server.list_resources())
+    assert len(tools) == 2
+    assert len(resources) == 0
+    for component in tools:
+        meta = component.meta or {}
+        assert meta["mcp/www_authenticate"] == "Bearer"
+        assert meta["securitySchemes"][0]["type"] == "oauth2"
+        assert meta["securitySchemes"][0]["scopes"] == ["read"]
 
 
 def test_create_pat_client_prefers_jwt_token() -> None:

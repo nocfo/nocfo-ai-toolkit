@@ -18,8 +18,9 @@ from fastmcp.server.auth import AccessToken, RemoteAuthProvider, TokenVerifier
 from fastmcp.server.auth.providers.introspection import IntrospectionTokenVerifier
 from fastmcp.server.auth.providers.jwt import JWTVerifier
 from fastmcp.server.dependencies import get_access_token
-from fastmcp.tools.tool import Tool
-from starlette.responses import JSONResponse
+from fastmcp.utilities.components import FastMCPComponent
+from starlette.datastructures import MutableHeaders
+from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from nocfo_toolkit.config import AUTH_HEADER_SCHEME, ToolkitConfig
@@ -85,7 +86,7 @@ class RemoteOAuthConfig:
 
         authorization_servers = tuple(
             _split_csv(_env("NOCFO_MCP_AUTHORIZATION_SERVERS"))
-            or [f"{config.base_url.rstrip('/')}/auth"]
+            or [config.base_url.rstrip("/")]
         )
         required_scopes = tuple(_split_csv(_env("NOCFO_MCP_REQUIRED_SCOPES")))
         jwt_audience = tuple(_split_csv(_env("NOCFO_MCP_JWT_AUDIENCE")))
@@ -129,12 +130,21 @@ class RemoteOAuthConfig:
                 raise MCPAuthConfigurationError(
                     "Missing NOCFO_MCP_JWKS_URI for JWT verifier mode."
                 )
-            return JWTVerifier(
+            jwt_verifier = JWTVerifier(
                 jwks_uri=self.jwt_jwks_uri,
                 issuer=self.jwt_issuer,
                 audience=list(self.jwt_audience) if self.jwt_audience else None,
                 required_scopes=list(self.required_scopes) or None,
             )
+            if self.userinfo_url:
+                return FallbackTokenVerifier(
+                    primary=jwt_verifier,
+                    secondary=UserInfoTokenVerifier(
+                        userinfo_url=self.userinfo_url,
+                        required_scopes=list(self.required_scopes) or None,
+                    ),
+                )
+            return jwt_verifier
 
         if self.verifier_mode == "userinfo":
             if not self.userinfo_url:
@@ -222,6 +232,21 @@ class UserInfoTokenVerifier(TokenVerifier):
             scopes=scopes,
             claims=payload,
         )
+
+
+class FallbackTokenVerifier(TokenVerifier):
+    """Try primary verifier first, then fall back to secondary verifier."""
+
+    def __init__(self, *, primary: TokenVerifier, secondary: TokenVerifier) -> None:
+        super().__init__(required_scopes=primary.required_scopes)
+        self._primary = primary
+        self._secondary = secondary
+
+    async def verify_token(self, token: str) -> AccessToken | None:
+        primary_result = await self._primary.verify_token(token)
+        if primary_result is not None:
+            return primary_result
+        return await self._secondary.verify_token(token)
 
 
 class JwtExchangeAuth(httpx.Auth):
@@ -398,34 +423,93 @@ class _CleanUrlAuthProvider(RemoteAuthProvider):
         return [self._clean_metadata_route(r) for r in routes]
 
     @staticmethod
+    def _strip_slashes_from_metadata_body(body: dict[str, Any]) -> dict[str, Any]:
+        for key in ("resource", "authorization_servers"):
+            val = body.get(key)
+            if isinstance(val, str):
+                body[key] = val.rstrip("/")
+            elif isinstance(val, list):
+                body[key] = [
+                    str(item).rstrip("/") if item is not None else item for item in val
+                ]
+        return body
+
+    @staticmethod
     def _clean_metadata_route(route: Route) -> Route:
         if "oauth-protected-resource" not in (route.path or ""):
             return route
 
         original = route.endpoint
-        # Some Starlette routes wrap endpoints as ASGI callables
-        # (scope, receive, send). Only wrap request-style endpoints.
         try:
-            if len(inspect.signature(original).parameters) != 1:
-                return route
+            signature_params = len(inspect.signature(original).parameters)
         except (TypeError, ValueError):
             return route
 
-        async def _strip_trailing_slashes(request):  # type: ignore[no-untyped-def]
-            response = await original(request)
-            body = json.loads(response.body)
-            for key in ("resource", "authorization_servers"):
-                val = body.get(key)
-                if isinstance(val, str):
-                    body[key] = val.rstrip("/")
-                elif isinstance(val, list):
-                    body[key] = [
-                        v.rstrip("/") if isinstance(v, str) else v for v in val
-                    ]
-            return JSONResponse(body, headers=dict(response.headers))
+        if signature_params == 1:
+
+            async def _strip_trailing_slashes(request):  # type: ignore[no-untyped-def]
+                response = await original(request)
+                body = json.loads(response.body)
+                cleaned = _CleanUrlAuthProvider._strip_slashes_from_metadata_body(body)
+                return JSONResponse(cleaned, headers=dict(response.headers))
+
+            wrapped_endpoint = _strip_trailing_slashes
+        elif signature_params == 3:
+
+            async def _strip_trailing_slashes_from_asgi(  # type: ignore[no-untyped-def]
+                request,
+            ):
+                start_message: dict[str, Any] | None = None
+                body_chunks: list[bytes] = []
+
+                async def _capture_send(message: dict[str, Any]) -> None:
+                    nonlocal start_message
+                    message_type = message.get("type")
+                    if message_type == "http.response.start":
+                        start_message = dict(message)
+                        return
+                    if message_type == "http.response.body":
+                        body_chunks.append(message.get("body", b""))
+
+                await original(request.scope, request.receive, _capture_send)
+                response_body = b"".join(body_chunks)
+                transformed_body = response_body
+                status_code = 200
+                headers_dict: dict[str, str] = {}
+
+                if start_message is not None:
+                    status_code = int(start_message.get("status", 200))
+                    headers = MutableHeaders(raw=start_message.get("headers", []))
+                    content_type = headers.get("content-type", "")
+                    if "application/json" in content_type:
+                        try:
+                            parsed_body = json.loads(response_body.decode("utf-8"))
+                        except (UnicodeDecodeError, json.JSONDecodeError):
+                            parsed_body = None
+                        if isinstance(parsed_body, dict):
+                            cleaned = (
+                                _CleanUrlAuthProvider._strip_slashes_from_metadata_body(
+                                    parsed_body
+                                )
+                            )
+                            transformed_body = json.dumps(cleaned).encode("utf-8")
+                            headers["content-length"] = str(len(transformed_body))
+                    headers_dict = dict(headers.items())
+
+                return Response(
+                    content=transformed_body,
+                    status_code=status_code,
+                    headers=headers_dict,
+                )
+
+            wrapped_endpoint = _strip_trailing_slashes_from_asgi
+        else:
+            return route
 
         return Route(
-            route.path, endpoint=_strip_trailing_slashes, methods=route.methods
+            route.path,
+            endpoint=wrapped_endpoint,
+            methods=route.methods,
         )
 
 
@@ -458,9 +542,12 @@ def build_remote_auth_provider(
 
 
 def apply_tool_auth_metadata(
-    component: Tool, *, required_scopes: tuple[str, ...]
+    component: FastMCPComponent, *, required_scopes: tuple[str, ...]
 ) -> None:
-    """Attach explicit auth metadata so connector UIs can trigger linking flows."""
+    """Attach explicit auth metadata so connector UIs can trigger linking flows.
+
+    Applies to tools, resources, and resource templates from the OpenAPI provider.
+    """
 
     meta: dict[str, Any] = dict(component.meta or {})
     scheme: dict[str, Any] = {"type": "oauth2"}
