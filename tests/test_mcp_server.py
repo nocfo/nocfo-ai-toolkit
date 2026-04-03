@@ -392,6 +392,7 @@ def test_build_invoice_payload_reports_row_errors() -> None:
         row_amount="",
         row_product_count="1",
         row_vat_rate=None,
+        row_vat_code=None,
         row_description=None,
         extra_payload_json=None,
         invoice_payload=None,
@@ -463,6 +464,7 @@ def test_invoice_app_payload_builder_reports_invalid_inputs() -> None:
         row_amount="abc",
         row_product_count="1",
         row_vat_rate=None,
+        row_vat_code=None,
         row_description=None,
         extra_payload_json='{"x": 1}',
         invoice_payload=None,
@@ -489,6 +491,7 @@ def test_invoice_app_non_ui_payload_shape() -> None:
         "row_amount": "100.00",
         "row_product_count": "1",
         "row_vat_rate": "",
+        "row_vat_code": "",
         "row_description": "",
         "extra_payload_json": "",
         "preset_payload": {},
@@ -503,6 +506,33 @@ def test_invoice_app_non_ui_payload_shape() -> None:
     assert payload["submit_tool"] == "invoice_create_submit"
     assert payload["warnings"] == ["warning"]
     assert payload["prefill"]["receiver"] == "10"
+
+
+def test_build_invoice_payload_includes_vat_code() -> None:
+    result = _build_invoice_payload(
+        receiver="12",
+        invoicing_date="2026-04-03",
+        payment_condition_days="14",
+        reference=None,
+        description=None,
+        contact_person=None,
+        seller_reference=None,
+        buyer_reference=None,
+        row_name="Service line",
+        row_unit="kpl",
+        row_amount="100.00",
+        row_product_count="1",
+        row_vat_rate="25.5",
+        row_vat_code="1",
+        row_description=None,
+        extra_payload_json=None,
+        invoice_payload=None,
+        preset_payload=None,
+    )
+    assert result["errors"] == []
+    rows = result["payload"]["rows"]
+    assert isinstance(rows, list) and rows
+    assert rows[0]["vat_code"] == 1
 
 
 def test_invoice_app_parse_tool_error_handles_json_payload() -> None:

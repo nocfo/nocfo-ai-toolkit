@@ -96,6 +96,7 @@ def register_invoice_app_capability(
         row_amount: str | float | int | None = None,
         row_product_count: str | float | int | None = 1,
         row_vat_rate: str | float | int | None = None,
+        row_vat_code: str | int | None = None,
         row_description: str | None = None,
         extra_payload_json: str | None = None,
         invoice_payload: dict[str, Any] | None = None,
@@ -122,6 +123,7 @@ def register_invoice_app_capability(
             row_amount=row_amount,
             row_product_count=row_product_count,
             row_vat_rate=row_vat_rate,
+            row_vat_code=row_vat_code,
             row_description=row_description,
             extra_payload_json=extra_payload_json,
             invoice_payload=invoice_payload,
@@ -238,6 +240,7 @@ def _build_form_defaults(
         "row_amount": _to_string_or_none(first_row.get("amount")) or "",
         "row_product_count": _to_string_or_none(first_row.get("product_count")) or "1",
         "row_vat_rate": _to_string_or_none(first_row.get("vat_rate")) or "",
+        "row_vat_code": _to_string_or_none(first_row.get("vat_code")) or "1",
         "row_description": _to_string_or_none(first_row.get("description")) or "",
         "extra_payload_json": "",
         "preset_payload": data,
@@ -284,6 +287,7 @@ def _build_non_ui_form_payload(
             {"name": "row_product_count", "type": "number", "required": False},
             {"name": "row_unit", "type": "string", "required": False},
             {"name": "row_vat_rate", "type": "number", "required": False},
+            {"name": "row_vat_code", "type": "integer", "required": False},
             {
                 "name": "extra_payload_json",
                 "type": "json_string",
@@ -353,6 +357,7 @@ def _build_prefab_form(
                         "row_amount": STATE.row_amount,
                         "row_product_count": STATE.row_product_count,
                         "row_vat_rate": STATE.row_vat_rate,
+                        "row_vat_code": STATE.row_vat_code,
                         "row_description": STATE.row_description,
                         "extra_payload_json": STATE.extra_payload_json,
                         "preset_payload": STATE.preset_payload,
@@ -443,6 +448,13 @@ def _build_prefab_form(
                     placeholder="VAT rate (optional)",
                     min=0,
                 )
+                Input(
+                    name="row_vat_code",
+                    input_type="number",
+                    value=str(defaults.get("row_vat_code") or "1"),
+                    placeholder="VAT code (default 1)",
+                    min=1,
+                )
                 Textarea(
                     name="row_description",
                     value=str(defaults.get("row_description") or ""),
@@ -479,6 +491,7 @@ def _build_prefab_form(
             "row_amount": defaults["row_amount"],
             "row_product_count": defaults["row_product_count"],
             "row_vat_rate": defaults["row_vat_rate"],
+            "row_vat_code": defaults["row_vat_code"],
             "row_description": defaults["row_description"],
             "extra_payload_json": defaults["extra_payload_json"],
             "preset_payload": defaults["preset_payload"],
@@ -507,6 +520,7 @@ def _build_invoice_payload(
     row_amount: str | float | int | None,
     row_product_count: str | float | int | None,
     row_vat_rate: str | float | int | None,
+    row_vat_code: str | int | None,
     row_description: str | None,
     extra_payload_json: str | None,
     invoice_payload: dict[str, Any] | None,
@@ -559,6 +573,7 @@ def _build_invoice_payload(
             row_amount=row_amount,
             row_product_count=row_product_count,
             row_vat_rate=row_vat_rate,
+            row_vat_code=row_vat_code,
             row_description=row_description,
         )
         if row["errors"]:
@@ -593,6 +608,7 @@ def _build_row_payload(
     row_amount: str | float | int | None,
     row_product_count: str | float | int | None,
     row_vat_rate: str | float | int | None,
+    row_vat_code: str | int | None,
     row_description: str | None,
 ) -> dict[str, Any]:
     errors: list[str] = []
@@ -600,6 +616,7 @@ def _build_row_payload(
     cleaned_amount = _coerce_float(row_amount)
     cleaned_count = _coerce_float(row_product_count)
     cleaned_vat = _coerce_float(row_vat_rate)
+    cleaned_vat_code = _coerce_int(row_vat_code)
 
     if cleaned_name is None and row_amount in (None, "", 0, 0.0):
         return {"value": None, "errors": []}
@@ -620,6 +637,7 @@ def _build_row_payload(
     }
     if cleaned_vat is not None:
         row["vat_rate"] = cleaned_vat
+    row["vat_code"] = cleaned_vat_code if cleaned_vat_code is not None else 1
     cleaned_row_description = _clean_optional(row_description)
     if cleaned_row_description:
         row["description"] = cleaned_row_description
