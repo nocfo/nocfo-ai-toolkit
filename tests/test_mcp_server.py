@@ -22,6 +22,7 @@ from nocfo_toolkit.mcp.invoice_app import (
     _build_form_defaults,
     _build_invoice_payload,
     _build_non_ui_form_payload,
+    _build_prefab_form,
     _parse_tool_error,
 )
 from nocfo_toolkit.openapi import X_MCP_COMPONENT_TYPE, filter_mcp_spec
@@ -374,6 +375,8 @@ def test_build_form_defaults_applies_preset_values() -> None:
     assert defaults["row_name"] == "Consulting"
     assert defaults["row_amount"] == "1500"
     assert defaults["row_product_count"] == "2"
+    assert defaults["product_id"] == ""
+    assert "attachment_hints" in defaults
     assert defaults["preset_warnings"] == []
 
 
@@ -394,6 +397,8 @@ def test_build_invoice_payload_reports_row_errors() -> None:
         row_vat_rate=None,
         row_vat_code=None,
         row_description=None,
+        product_id=None,
+        attachment_ids=None,
         extra_payload_json=None,
         invoice_payload=None,
         preset_payload=None,
@@ -415,6 +420,9 @@ def test_build_non_ui_form_payload_includes_submit_tool() -> None:
     assert payload["submit_tool"] == "invoice_create_submit"
     assert payload["prefill"]["business_slug"] == "demo-930bf1"
     assert payload["ui_supported"] is False
+    assert "receiver_options" in payload
+    assert "product_options" in payload
+    assert "attachment_hints" in payload
 
 
 def test_parse_tool_error_handles_json_payload() -> None:
@@ -466,6 +474,8 @@ def test_invoice_app_payload_builder_reports_invalid_inputs() -> None:
         row_vat_rate=None,
         row_vat_code=None,
         row_description=None,
+        product_id=None,
+        attachment_ids=None,
         extra_payload_json='{"x": 1}',
         invoice_payload=None,
         preset_payload=None,
@@ -493,8 +503,14 @@ def test_invoice_app_non_ui_payload_shape() -> None:
         "row_vat_rate": "",
         "row_vat_code": "",
         "row_description": "",
+        "product_id": "",
+        "attachment_ids": "",
         "extra_payload_json": "",
         "preset_payload": {},
+        "receiver_options": [],
+        "product_options": [],
+        "unit_options": ["kpl"],
+        "attachment_hints": "help",
         "preset_warnings": ["warning"],
     }
     payload = _build_non_ui_form_payload(
@@ -506,6 +522,7 @@ def test_invoice_app_non_ui_payload_shape() -> None:
     assert payload["submit_tool"] == "invoice_create_submit"
     assert payload["warnings"] == ["warning"]
     assert payload["prefill"]["receiver"] == "10"
+    assert payload["attachment_hints"] == "help"
 
 
 def test_build_invoice_payload_includes_vat_code() -> None:
@@ -525,6 +542,8 @@ def test_build_invoice_payload_includes_vat_code() -> None:
         row_vat_rate="25.5",
         row_vat_code="1",
         row_description=None,
+        product_id="309",
+        attachment_ids="12,34",
         extra_payload_json=None,
         invoice_payload=None,
         preset_payload=None,
@@ -533,6 +552,44 @@ def test_build_invoice_payload_includes_vat_code() -> None:
     rows = result["payload"]["rows"]
     assert isinstance(rows, list) and rows
     assert rows[0]["vat_code"] == 1
+    assert rows[0]["product"] == 309
+    assert result["payload"]["attachments"] == [12, 34]
+
+
+def test_prefab_form_renders_selects_when_options_available() -> None:
+    defaults = {
+        "business_slug": "demo-930bf1",
+        "receiver": "2289",
+        "invoicing_date": "2026-01-01",
+        "payment_condition_days": "14",
+        "reference": "",
+        "description": "",
+        "contact_person": "",
+        "seller_reference": "",
+        "buyer_reference": "",
+        "product_id": "309",
+        "row_name": "Service",
+        "row_unit": "kpl",
+        "row_amount": "100.00",
+        "row_product_count": "1",
+        "row_vat_rate": "25.5",
+        "row_vat_code": "1",
+        "row_description": "",
+        "attachment_ids": "",
+        "extra_payload_json": "",
+        "preset_payload": {},
+        "receiver_options": [{"id": 2289, "label": "D Market Oy (BUSINESS)"}],
+        "product_options": [{"id": 309, "label": "Siivous | unit=kpl"}],
+        "unit_options": ["kpl", "h"],
+        "attachment_hints": "Use file IDs.",
+        "preset_warnings": [],
+    }
+    app = _build_prefab_form(defaults=defaults, submit_tool_name="invoice_create_submit")
+    payload = app.to_json()
+    payload_str = str(payload)
+    assert "SelectOption" in payload_str
+    assert "Advanced invoice options" in payload_str
+    assert "attachment_ids" in payload_str
 
 
 def test_invoice_app_parse_tool_error_handles_json_payload() -> None:
