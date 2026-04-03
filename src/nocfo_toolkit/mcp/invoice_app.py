@@ -298,11 +298,11 @@ def _extract_required_fields_for_invoice_create(server: FastMCP) -> tuple[str, .
             if isinstance(params, dict):
                 required = params.get("required")
                 if isinstance(required, list):
-                    return tuple(str(item) for item in required if isinstance(item, str))
+                    return tuple(
+                        str(item) for item in required if isinstance(item, str)
+                    )
             return ()
     return ()
-
-
 
 
 async def _fetch_receiver_options(
@@ -484,9 +484,6 @@ def _build_form_defaults(
     return defaults
 
 
-
-
-
 def _extract_invoice_schema_hints(server: FastMCP) -> dict[str, Any]:
     """Extract schema constraints/enums for frontend-parity field hints."""
     tool_name = _locate_tool_name_by_route(
@@ -528,8 +525,14 @@ def _extract_invoice_schema_hints(server: FastMCP) -> dict[str, Any]:
         "attachments": _extract_array_hints(properties.get("attachments")),
     }
 
-    rows_schema = properties.get("rows") if isinstance(properties.get("rows"), dict) else {}
-    row_ref = rows_schema.get("items", {}).get("$ref") if isinstance(rows_schema.get("items"), dict) else None
+    rows_schema = (
+        properties.get("rows") if isinstance(properties.get("rows"), dict) else {}
+    )
+    row_ref = (
+        rows_schema.get("items", {}).get("$ref")
+        if isinstance(rows_schema.get("items"), dict)
+        else None
+    )
     row_hints: dict[str, Any] = {}
     if isinstance(row_ref, str) and row_ref.startswith("#/$defs/"):
         row_name = row_ref.split("#/$defs/")[-1]
@@ -606,12 +609,13 @@ def _extract_array_hints(schema: Any) -> dict[str, Any]:
     return result
 
 
-
 def _build_field_definitions(
     schema_hints: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     schema_hints = dict(schema_hints or {})
-    row_hints = schema_hints.get("row") if isinstance(schema_hints.get("row"), dict) else {}
+    row_hints = (
+        schema_hints.get("row") if isinstance(schema_hints.get("row"), dict) else {}
+    )
 
     fields = [
         {
@@ -761,18 +765,42 @@ def _build_field_definitions(
     ]
 
     hint_map: dict[str, dict[str, Any]] = {
-        "receiver": schema_hints.get("receiver") if isinstance(schema_hints.get("receiver"), dict) else {},
-        "invoicing_date": schema_hints.get("invoicing_date") if isinstance(schema_hints.get("invoicing_date"), dict) else {},
-        "payment_condition_days": schema_hints.get("payment_condition_days") if isinstance(schema_hints.get("payment_condition_days"), dict) else {},
-        "reference": schema_hints.get("reference") if isinstance(schema_hints.get("reference"), dict) else {},
-        "description": schema_hints.get("description") if isinstance(schema_hints.get("description"), dict) else {},
-        "row_name": row_hints.get("name") if isinstance(row_hints.get("name"), dict) else {},
-        "row_unit": row_hints.get("unit") if isinstance(row_hints.get("unit"), dict) else {},
-        "row_amount": row_hints.get("amount") if isinstance(row_hints.get("amount"), dict) else {},
-        "row_product_count": row_hints.get("product_count") if isinstance(row_hints.get("product_count"), dict) else {},
-        "row_vat_rate": row_hints.get("vat_rate") if isinstance(row_hints.get("vat_rate"), dict) else {},
-        "row_vat_code": row_hints.get("vat_code") if isinstance(row_hints.get("vat_code"), dict) else {},
-        "row_description": row_hints.get("description") if isinstance(row_hints.get("description"), dict) else {},
+        "receiver": schema_hints.get("receiver")
+        if isinstance(schema_hints.get("receiver"), dict)
+        else {},
+        "invoicing_date": schema_hints.get("invoicing_date")
+        if isinstance(schema_hints.get("invoicing_date"), dict)
+        else {},
+        "payment_condition_days": schema_hints.get("payment_condition_days")
+        if isinstance(schema_hints.get("payment_condition_days"), dict)
+        else {},
+        "reference": schema_hints.get("reference")
+        if isinstance(schema_hints.get("reference"), dict)
+        else {},
+        "description": schema_hints.get("description")
+        if isinstance(schema_hints.get("description"), dict)
+        else {},
+        "row_name": row_hints.get("name")
+        if isinstance(row_hints.get("name"), dict)
+        else {},
+        "row_unit": row_hints.get("unit")
+        if isinstance(row_hints.get("unit"), dict)
+        else {},
+        "row_amount": row_hints.get("amount")
+        if isinstance(row_hints.get("amount"), dict)
+        else {},
+        "row_product_count": row_hints.get("product_count")
+        if isinstance(row_hints.get("product_count"), dict)
+        else {},
+        "row_vat_rate": row_hints.get("vat_rate")
+        if isinstance(row_hints.get("vat_rate"), dict)
+        else {},
+        "row_vat_code": row_hints.get("vat_code")
+        if isinstance(row_hints.get("vat_code"), dict)
+        else {},
+        "row_description": row_hints.get("description")
+        if isinstance(row_hints.get("description"), dict)
+        else {},
     }
 
     for field in fields:
@@ -984,7 +1012,8 @@ def _build_prefab_form(
                             SelectOption(
                                 value=opt_id,
                                 label=str(option.get("label") or opt_id),
-                                selected=opt_id == str(defaults.get("product_id") or ""),
+                                selected=opt_id
+                                == str(defaults.get("product_id") or ""),
                             )
                 else:
                     Input(
@@ -1029,7 +1058,9 @@ def _build_prefab_form(
                         )
 
                 with Accordion(multiple=True, default_open_items=[0]):
-                    with AccordionItem(title="Advanced invoice options", value="advanced"):
+                    with AccordionItem(
+                        title="Advanced invoice options", value="advanced"
+                    ):
                         Input(
                             name="reference",
                             value=str(defaults.get("reference") or ""),
@@ -1157,7 +1188,9 @@ def _build_invoice_payload(
     payload = (
         copy.deepcopy(invoice_payload)
         if isinstance(invoice_payload, dict)
-        else copy.deepcopy(preset_payload) if isinstance(preset_payload, dict) else {}
+        else copy.deepcopy(preset_payload)
+        if isinstance(preset_payload, dict)
+        else {}
     )
     errors: list[str] = []
     warnings: list[str] = []
@@ -1288,7 +1321,10 @@ def _normalize_attachment_ids(
         for item in value:
             attachment_id = _coerce_int(item)
             if attachment_id is None:
-                return {"value": None, "errors": ["attachment_ids must contain integers."]}
+                return {
+                    "value": None,
+                    "errors": ["attachment_ids must contain integers."],
+                }
             normalized.append(attachment_id)
         return {"value": normalized or None, "errors": []}
 

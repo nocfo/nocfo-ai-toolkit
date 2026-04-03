@@ -560,8 +560,6 @@ def test_build_invoice_payload_includes_vat_code() -> None:
     assert result["payload"]["attachments"] == [12, 34]
 
 
-
-
 def test_non_ui_form_fields_include_required_metadata() -> None:
     defaults = {
         "business_slug": "demo-930bf1",
@@ -601,6 +599,7 @@ def test_non_ui_form_fields_include_required_metadata() -> None:
     row_amount_field = next(field for field in fields if field["name"] == "row_amount")
     assert row_amount_field["required"] is True
 
+
 def test_prefab_form_renders_selects_when_options_available() -> None:
     defaults = {
         "business_slug": "demo-930bf1",
@@ -629,7 +628,9 @@ def test_prefab_form_renders_selects_when_options_available() -> None:
         "attachment_hints": "Use file IDs.",
         "preset_warnings": [],
     }
-    app = _build_prefab_form(defaults=defaults, submit_tool_name="invoice_create_submit")
+    app = _build_prefab_form(
+        defaults=defaults, submit_tool_name="invoice_create_submit"
+    )
     payload = app.to_json()
     payload_str = str(payload)
     assert "SelectOption" in payload_str
