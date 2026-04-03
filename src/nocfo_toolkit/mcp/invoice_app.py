@@ -67,6 +67,16 @@ class InvoiceAppOptions:
     submit_tool_name: str = "invoice_create_submit"
 
 
+@dataclass(frozen=True)
+class InvoiceSchemaHints:
+    """Schema-derived hints from upstream OpenAPI tool input schema."""
+
+    required_fields: tuple[str, ...]
+    properties: dict[str, dict[str, Any]]
+    row_required_fields: tuple[str, ...]
+    row_properties: dict[str, dict[str, Any]]
+
+
 def register_invoice_app_capability(
     server: FastMCP,
     *,
@@ -94,6 +104,7 @@ def register_invoice_app_capability(
         method="GET",
         path_pattern=_PRODUCTS_LIST_PATH_RE,
     )
+    schema_hints = _extract_invoice_schema_hints(server)
 
     @server.tool(
         name=opts.submit_tool_name,
@@ -226,7 +237,7 @@ def register_invoice_app_capability(
             preset=preset,
             receiver_options=receiver_options,
             product_options=product_options,
-            required_fields=_extract_required_fields_for_invoice_create(server),
+            schema_hints=schema_hints,
         )
 
         if (
@@ -398,6 +409,7 @@ def _build_form_defaults(
     receiver_options: list[dict[str, Any]] | None = None,
     product_options: list[dict[str, Any]] | None = None,
     required_fields: tuple[str, ...] | None = None,
+    schema_hints: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     data = copy.deepcopy(preset) if isinstance(preset, dict) else {}
     receiver_options = list(receiver_options or [])
@@ -425,6 +437,7 @@ def _build_form_defaults(
             default_unit_options.append(unit)
 
     required_fields_set = set(required_fields or ())
+    schema_hints = dict(schema_hints or {})
 
     defaults: dict[str, Any] = {
         "business_slug": business_slug,
@@ -457,6 +470,7 @@ def _build_form_defaults(
             "Use NoCFO files API beforehand to upload and collect IDs."
         ),
         "required_fields": sorted(required_fields_set),
+        "schema_hints": schema_hints,
     }
 
     warnings: list[str] = []
@@ -472,8 +486,134 @@ def _build_form_defaults(
 
 
 
-def _build_field_definitions() -> list[dict[str, Any]]:
-    return [
+
+def _extract_invoice_schema_hints(server: FastMCP) -> dict[str, Any]:
+    """Extract schema constraints/enums for frontend-parity field hints."""
+    tool_name = _locate_tool_name_by_route(
+        server,
+        method="POST",
+        path_pattern=_INVOICE_CREATE_PATH_RE,
+    )
+    if not tool_name:
+        return {}
+
+    params: dict[str, Any] = {}
+    for provider in getattr(server, "providers", []):
+        tools = getattr(provider, "_tools", None)
+        if not isinstance(tools, dict):
+            continue
+        for tool in tools.values():
+            if str(getattr(tool, "name", "")) != tool_name:
+                continue
+            candidate = getattr(tool, "parameters", None)
+            if isinstance(candidate, dict):
+                params = candidate
+            break
+
+    properties = params.get("properties") if isinstance(params, dict) else None
+    defs = params.get("$defs") if isinstance(params, dict) else None
+    if not isinstance(properties, dict):
+        return {}
+    if not isinstance(defs, dict):
+        defs = {}
+
+    hints: dict[str, Any] = {
+        "receiver": _extract_primitive_hints(properties.get("receiver")),
+        "invoicing_date": _extract_primitive_hints(properties.get("invoicing_date")),
+        "payment_condition_days": _extract_primitive_hints(
+            properties.get("payment_condition_days")
+        ),
+        "reference": _extract_primitive_hints(properties.get("reference")),
+        "description": _extract_primitive_hints(properties.get("description")),
+        "attachments": _extract_array_hints(properties.get("attachments")),
+    }
+
+    rows_schema = properties.get("rows") if isinstance(properties.get("rows"), dict) else {}
+    row_ref = rows_schema.get("items", {}).get("$ref") if isinstance(rows_schema.get("items"), dict) else None
+    row_hints: dict[str, Any] = {}
+    if isinstance(row_ref, str) and row_ref.startswith("#/$defs/"):
+        row_name = row_ref.split("#/$defs/")[-1]
+        row_schema = defs.get(row_name)
+        if isinstance(row_schema, dict):
+            row_hints = _extract_row_schema_hints(row_schema)
+    hints["row"] = row_hints
+
+    return hints
+
+
+def _extract_row_schema_hints(row_schema: dict[str, Any]) -> dict[str, Any]:
+    properties = row_schema.get("properties")
+    if not isinstance(properties, dict):
+        return {}
+    required = row_schema.get("required")
+    required_set = set(required) if isinstance(required, list) else set()
+
+    result: dict[str, Any] = {}
+    for field_name in (
+        "name",
+        "unit",
+        "amount",
+        "vat_rate",
+        "vat_code",
+        "product",
+        "product_count",
+        "description",
+    ):
+        info = _extract_primitive_hints(properties.get(field_name))
+        if info:
+            info["required_by_backend"] = field_name in required_set
+            result[field_name] = info
+    return result
+
+
+def _extract_primitive_hints(schema: Any) -> dict[str, Any]:
+    if not isinstance(schema, dict):
+        return {}
+
+    result: dict[str, Any] = {}
+    for key in (
+        "type",
+        "format",
+        "minimum",
+        "maximum",
+        "exclusiveMinimum",
+        "exclusiveMaximum",
+        "minLength",
+        "maxLength",
+        "pattern",
+    ):
+        if key in schema:
+            result[key] = schema[key]
+
+    enum_values = schema.get("enum")
+    if isinstance(enum_values, list) and enum_values:
+        result["enum"] = enum_values
+
+    if schema.get("nullable") is True:
+        result["nullable"] = True
+
+    return result
+
+
+def _extract_array_hints(schema: Any) -> dict[str, Any]:
+    if not isinstance(schema, dict):
+        return {}
+    result = _extract_primitive_hints(schema)
+    items = schema.get("items")
+    item_hints = _extract_primitive_hints(items)
+    if item_hints:
+        result["items"] = item_hints
+    return result
+
+
+
+def _build_field_definitions(
+    schema_hints: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    schema_hints = dict(schema_hints or {})
+    row_hints = schema_hints.get("row") if isinstance(schema_hints.get("row"), dict) else {}
+
+    fields = [
         {
             "name": "receiver",
             "label": "Receiver",
@@ -620,13 +760,50 @@ def _build_field_definitions() -> list[dict[str, Any]]:
         },
     ]
 
+    hint_map: dict[str, dict[str, Any]] = {
+        "receiver": schema_hints.get("receiver") if isinstance(schema_hints.get("receiver"), dict) else {},
+        "invoicing_date": schema_hints.get("invoicing_date") if isinstance(schema_hints.get("invoicing_date"), dict) else {},
+        "payment_condition_days": schema_hints.get("payment_condition_days") if isinstance(schema_hints.get("payment_condition_days"), dict) else {},
+        "reference": schema_hints.get("reference") if isinstance(schema_hints.get("reference"), dict) else {},
+        "description": schema_hints.get("description") if isinstance(schema_hints.get("description"), dict) else {},
+        "row_name": row_hints.get("name") if isinstance(row_hints.get("name"), dict) else {},
+        "row_unit": row_hints.get("unit") if isinstance(row_hints.get("unit"), dict) else {},
+        "row_amount": row_hints.get("amount") if isinstance(row_hints.get("amount"), dict) else {},
+        "row_product_count": row_hints.get("product_count") if isinstance(row_hints.get("product_count"), dict) else {},
+        "row_vat_rate": row_hints.get("vat_rate") if isinstance(row_hints.get("vat_rate"), dict) else {},
+        "row_vat_code": row_hints.get("vat_code") if isinstance(row_hints.get("vat_code"), dict) else {},
+        "row_description": row_hints.get("description") if isinstance(row_hints.get("description"), dict) else {},
+    }
+
+    for field in fields:
+        name = str(field.get("name"))
+        hints = hint_map.get(name) or {}
+        if not hints:
+            continue
+        for key in (
+            "minimum",
+            "maximum",
+            "exclusiveMinimum",
+            "exclusiveMaximum",
+            "minLength",
+            "maxLength",
+            "pattern",
+            "format",
+            "enum",
+            "nullable",
+        ):
+            if key in hints:
+                field[key] = hints[key]
+
+    return fields
+
 
 def _build_non_ui_form_payload(
     *,
     defaults: dict[str, Any],
     submit_tool_name: str,
 ) -> dict[str, Any]:
-    fields = _build_field_definitions()
+    fields = _build_field_definitions(defaults.get("schema_hints"))
     required_fields = [field["name"] for field in fields if field.get("required")]
     optional_fields = [field["name"] for field in fields if not field.get("required")]
     return {
