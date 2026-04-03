@@ -19,6 +19,7 @@ from nocfo_toolkit.mcp.server import (
     MCPServerOptions,
 )
 from nocfo_toolkit.mcp.invoice_app import (
+    _HAS_PREFAB_UI,
     _build_form_defaults,
     _build_invoice_payload,
     _build_non_ui_form_payload,
@@ -601,6 +602,9 @@ def test_non_ui_form_fields_include_required_metadata() -> None:
 
 
 def test_prefab_form_renders_selects_when_options_available() -> None:
+    if not _HAS_PREFAB_UI:
+        pytest.skip("prefab_ui is not installed in this environment")
+
     defaults = {
         "business_slug": "demo-930bf1",
         "receiver": "2289",
