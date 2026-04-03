@@ -10,12 +10,16 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from fastmcp import Context
-from fastmcp.apps.config import UI_EXTENSION_ID
 from fastmcp.exceptions import ToolError
 from fastmcp.utilities.logging import get_logger
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
+
+try:
+    from fastmcp.apps.config import UI_EXTENSION_ID
+except ImportError:  # pragma: no cover - compatibility with base fastmcp installs
+    UI_EXTENSION_ID = "io.modelcontextprotocol/ui"
 
 try:
     from prefab_ui.actions import SetState
