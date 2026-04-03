@@ -98,8 +98,9 @@ def register_invoice_app_capability(
     @server.tool(
         name=opts.submit_tool_name,
         description=(
-            "Submit invoice payload to NoCFO. Returns validation errors in a stable "
-            "structured format so callers can correct input and retry."
+            "Submit invoice form data to NoCFO and return structured validation "
+            "feedback. Agents can call this after user confirmation, then either "
+            "surface created invoice details or show returned field errors for retry."
         ),
     )
     async def invoice_create_submit(
@@ -195,8 +196,10 @@ def register_invoice_app_capability(
     @server.tool(
         name=opts.form_tool_name,
         description=(
-            "Open an interactive invoice creation app. Supports preset values and "
-            "returns backend validation feedback for correction."
+            "Open an interactive invoice creation form that mirrors core invoice "
+            "frontend behavior: required fields, selectable receiver/product options, "
+            "advanced fields, and correction loop instructions. Accepts partial or "
+            "full preset values from agent context."
         ),
         app=True if _HAS_PREFAB_UI else None,
     )
@@ -223,6 +226,7 @@ def register_invoice_app_capability(
             preset=preset,
             receiver_options=receiver_options,
             product_options=product_options,
+            required_fields=_extract_required_fields_for_invoice_create(server),
         )
 
         if (
@@ -260,6 +264,34 @@ def _locate_tool_name_by_route(
             if path_pattern.fullmatch(route_path):
                 return str(getattr(tool, "name", ""))
     return None
+
+
+def _extract_required_fields_for_invoice_create(server: FastMCP) -> tuple[str, ...]:
+    """Read required input fields from the upstream invoice-create OpenAPI tool."""
+    tool_name = _locate_tool_name_by_route(
+        server,
+        method="POST",
+        path_pattern=_INVOICE_CREATE_PATH_RE,
+    )
+    if not tool_name:
+        return ()
+
+    for provider in getattr(server, "providers", []):
+        tools = getattr(provider, "_tools", None)
+        if not isinstance(tools, dict):
+            continue
+        for tool in tools.values():
+            if str(getattr(tool, "name", "")) != tool_name:
+                continue
+            params = getattr(tool, "parameters", None)
+            if isinstance(params, dict):
+                required = params.get("required")
+                if isinstance(required, list):
+                    return tuple(str(item) for item in required if isinstance(item, str))
+            return ()
+    return ()
+
+
 
 
 async def _fetch_receiver_options(
@@ -365,6 +397,7 @@ def _build_form_defaults(
     preset: dict[str, Any] | None,
     receiver_options: list[dict[str, Any]] | None = None,
     product_options: list[dict[str, Any]] | None = None,
+    required_fields: tuple[str, ...] | None = None,
 ) -> dict[str, Any]:
     data = copy.deepcopy(preset) if isinstance(preset, dict) else {}
     receiver_options = list(receiver_options or [])
@@ -390,6 +423,8 @@ def _build_form_defaults(
         unit = _clean_optional(option.get("unit"))
         if unit and unit not in default_unit_options:
             default_unit_options.append(unit)
+
+    required_fields_set = set(required_fields or ())
 
     defaults: dict[str, Any] = {
         "business_slug": business_slug,
@@ -421,6 +456,7 @@ def _build_form_defaults(
             "Optional: provide existing attachment IDs (comma separated). "
             "Use NoCFO files API beforehand to upload and collect IDs."
         ),
+        "required_fields": sorted(required_fields_set),
     }
 
     warnings: list[str] = []
@@ -434,16 +470,183 @@ def _build_form_defaults(
     return defaults
 
 
+
+
+def _build_field_definitions() -> list[dict[str, Any]]:
+    return [
+        {
+            "name": "receiver",
+            "label": "Receiver",
+            "type": "integer",
+            "required": True,
+            "section": "main",
+            "description": "Customer/supplier contact id.",
+        },
+        {
+            "name": "invoicing_date",
+            "label": "Invoicing date",
+            "type": "date",
+            "required": False,
+            "section": "main",
+            "description": "Defaults to today when omitted.",
+        },
+        {
+            "name": "payment_condition_days",
+            "label": "Payment condition days",
+            "type": "integer",
+            "required": False,
+            "section": "main",
+            "description": "Defaults to 14.",
+        },
+        {
+            "name": "description",
+            "label": "Description",
+            "type": "string",
+            "required": False,
+            "section": "main",
+            "description": "Invoice-level free text.",
+        },
+        {
+            "name": "product_id",
+            "label": "Product",
+            "type": "integer",
+            "required": False,
+            "section": "main",
+            "description": "Optional product id for row linkage.",
+        },
+        {
+            "name": "row_name",
+            "label": "Row name",
+            "type": "string",
+            "required": True,
+            "section": "main",
+            "description": "Invoice row display name.",
+        },
+        {
+            "name": "row_amount",
+            "label": "Row amount",
+            "type": "number",
+            "required": True,
+            "section": "main",
+            "description": "Row unit price/amount.",
+        },
+        {
+            "name": "row_product_count",
+            "label": "Row quantity",
+            "type": "number",
+            "required": False,
+            "section": "main",
+            "description": "Defaults to 1.",
+        },
+        {
+            "name": "row_unit",
+            "label": "Row unit",
+            "type": "string",
+            "required": False,
+            "section": "main",
+            "description": "Defaults to kpl.",
+        },
+        {
+            "name": "reference",
+            "label": "Reference",
+            "type": "string",
+            "required": False,
+            "section": "advanced",
+            "description": "Optional reference; backend validates format.",
+        },
+        {
+            "name": "contact_person",
+            "label": "Contact person",
+            "type": "string",
+            "required": False,
+            "section": "advanced",
+            "description": "Optional contact person.",
+        },
+        {
+            "name": "seller_reference",
+            "label": "Seller reference",
+            "type": "string",
+            "required": False,
+            "section": "advanced",
+            "description": "Optional seller-side reference.",
+        },
+        {
+            "name": "buyer_reference",
+            "label": "Buyer reference",
+            "type": "string",
+            "required": False,
+            "section": "advanced",
+            "description": "Optional buyer-side reference.",
+        },
+        {
+            "name": "row_vat_rate",
+            "label": "VAT rate",
+            "type": "number",
+            "required": False,
+            "section": "advanced",
+            "description": "Optional VAT rate; can be inferred from product.",
+        },
+        {
+            "name": "row_vat_code",
+            "label": "VAT code",
+            "type": "integer",
+            "required": False,
+            "section": "advanced",
+            "description": "Defaults to 1 if omitted.",
+        },
+        {
+            "name": "row_description",
+            "label": "Row description",
+            "type": "string",
+            "required": False,
+            "section": "advanced",
+            "description": "Optional detailed row text.",
+        },
+        {
+            "name": "attachment_ids",
+            "label": "Attachment IDs",
+            "type": "string",
+            "required": False,
+            "section": "advanced",
+            "description": "Comma/space separated existing file ids.",
+        },
+        {
+            "name": "extra_payload_json",
+            "label": "Extra payload JSON",
+            "type": "json_string",
+            "required": False,
+            "section": "advanced",
+            "description": "Optional JSON object merged into payload.",
+        },
+    ]
+
+
 def _build_non_ui_form_payload(
     *,
     defaults: dict[str, Any],
     submit_tool_name: str,
 ) -> dict[str, Any]:
+    fields = _build_field_definitions()
+    required_fields = [field["name"] for field in fields if field.get("required")]
+    optional_fields = [field["name"] for field in fields if not field.get("required")]
     return {
         "mode": "fallback_form",
         "ui_supported": False,
         "title": "Create sales invoice",
         "submit_tool": submit_tool_name,
+        "agent_instructions": {
+            "purpose": (
+                "Use this form to mirror frontend invoice creation. Agent may prefill "
+                "any known values, ask user to complete missing values, then call "
+                "submit_tool with merged values."
+            ),
+            "required_fields": required_fields,
+            "optional_fields": optional_fields,
+            "submission_behavior": (
+                "submit_tool returns status=created on success or status=validation_error "
+                "with field-level details to display and retry."
+            ),
+        },
         "prefill": {
             key: value
             for key, value in defaults.items()
@@ -461,27 +664,7 @@ def _build_non_ui_form_payload(
         "product_options": defaults.get("product_options", []),
         "unit_options": defaults.get("unit_options", list(_DEFAULT_UNIT_OPTIONS)),
         "attachment_hints": defaults.get("attachment_hints"),
-        "fields": [
-            {"name": "receiver", "type": "integer", "required": True},
-            {"name": "invoicing_date", "type": "date", "required": False},
-            {"name": "payment_condition_days", "type": "integer", "required": False},
-            {"name": "reference", "type": "string", "required": False},
-            {"name": "description", "type": "string", "required": False},
-            {"name": "product_id", "type": "integer", "required": False},
-            {"name": "row_name", "type": "string", "required": True},
-            {"name": "row_amount", "type": "number", "required": True},
-            {"name": "row_product_count", "type": "number", "required": False},
-            {"name": "row_unit", "type": "string", "required": False},
-            {"name": "row_vat_rate", "type": "number", "required": False},
-            {"name": "row_vat_code", "type": "integer", "required": False},
-            {"name": "attachment_ids", "type": "string", "required": False},
-            {
-                "name": "extra_payload_json",
-                "type": "json_string",
-                "required": False,
-                "description": "Optional JSON object merged into payload.",
-            },
-        ],
+        "fields": fields,
         "warnings": defaults.get("preset_warnings", []),
     }
 
@@ -507,11 +690,13 @@ def _build_prefab_form(
                     f"Products: {len(product_options)}",
                     variant="secondary",
                 )
+                Badge("Required: receiver, row_name, row_amount", variant="outline")
 
         with CardContent(), Column(gap=4):
             Muted(
-                "Agent may prefill known values (for example receiver), then user can "
-                "complete missing fields and submit."
+                "Agent may prefill any known values (receiver, dates, references, "
+                "product, row values, VAT, attachments). User can then complete missing "
+                "fields and submit."
             )
 
             if defaults.get("preset_warnings"):
@@ -715,6 +900,10 @@ def _build_prefab_form(
                             rows=2,
                         )
                         Muted(str(defaults.get("attachment_hints") or ""))
+                        Muted(
+                            "Submit behavior: backend validates all fields; errors appear "
+                            "above and can be corrected without leaving this form."
+                        )
                         Textarea(
                             name="extra_payload_json",
                             value=str(defaults.get("extra_payload_json") or ""),

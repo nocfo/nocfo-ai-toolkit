@@ -423,6 +423,10 @@ def test_build_non_ui_form_payload_includes_submit_tool() -> None:
     assert "receiver_options" in payload
     assert "product_options" in payload
     assert "attachment_hints" in payload
+    assert "agent_instructions" in payload
+    assert "required_fields" in payload["agent_instructions"]
+    required = set(payload["agent_instructions"]["required_fields"])
+    assert {"receiver", "row_name", "row_amount"}.issubset(required)
 
 
 def test_parse_tool_error_handles_json_payload() -> None:
@@ -555,6 +559,47 @@ def test_build_invoice_payload_includes_vat_code() -> None:
     assert rows[0]["product"] == 309
     assert result["payload"]["attachments"] == [12, 34]
 
+
+
+
+def test_non_ui_form_fields_include_required_metadata() -> None:
+    defaults = {
+        "business_slug": "demo-930bf1",
+        "receiver": "2289",
+        "invoicing_date": "2026-01-01",
+        "payment_condition_days": "14",
+        "reference": "",
+        "description": "",
+        "contact_person": "",
+        "seller_reference": "",
+        "buyer_reference": "",
+        "product_id": "",
+        "row_name": "Service",
+        "row_unit": "kpl",
+        "row_amount": "100.00",
+        "row_product_count": "1",
+        "row_vat_rate": "",
+        "row_vat_code": "1",
+        "row_description": "",
+        "attachment_ids": "",
+        "extra_payload_json": "",
+        "preset_payload": {},
+        "receiver_options": [],
+        "product_options": [],
+        "unit_options": ["kpl"],
+        "attachment_hints": "help",
+        "preset_warnings": [],
+    }
+    payload = _build_non_ui_form_payload(
+        defaults=defaults,
+        submit_tool_name="invoice_create_submit",
+    )
+    assert payload["agent_instructions"]["required_fields"]
+    fields = payload["fields"]
+    receiver_field = next(field for field in fields if field["name"] == "receiver")
+    assert receiver_field["required"] is True
+    row_amount_field = next(field for field in fields if field["name"] == "row_amount")
+    assert row_amount_field["required"] is True
 
 def test_prefab_form_renders_selects_when_options_available() -> None:
     defaults = {
