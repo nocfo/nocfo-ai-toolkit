@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import httpx
 import pytest
 
@@ -16,6 +17,12 @@ from nocfo_toolkit.mcp.server import (
     build_mcp_component_name,
     create_server,
     MCPServerOptions,
+)
+from nocfo_toolkit.mcp.invoice_app import (
+    _build_form_defaults,
+    _build_invoice_payload,
+    _build_non_ui_form_payload,
+    _parse_tool_error,
 )
 from nocfo_toolkit.openapi import X_MCP_COMPONENT_TYPE, filter_mcp_spec
 
@@ -297,3 +304,212 @@ def test_filter_mcp_spec_prefers_backend_component_type_extension() -> None:
     tags = filtered["paths"]["/v1/non-get-as-resource/"]["post"]["tags"]
     assert "MCP_RESOURCE" in tags
     assert "MCP_TOOL" not in tags
+
+
+def test_create_server_registers_invoice_app_tools(monkeypatch) -> None:
+    config = ToolkitConfig(
+        api_token="pat-token",
+        token_source=TokenSource.ENV,
+        base_url="https://api-prd.nocfo.io",
+        output_format=OutputFormat.TABLE,
+    )
+    monkeypatch.setattr(
+        "nocfo_toolkit.mcp.server.load_openapi_spec",
+        lambda *, base_url: {
+            "openapi": "3.0.0",
+            "info": {"title": "NoCFO", "version": "1.0.0"},
+            "servers": [{"url": base_url}],
+            "paths": {
+                "/v1/invoicing/{business_slug}/invoice/": {
+                    "post": {
+                        "operationId": "Sales Invoices - Create",
+                        "tags": ["MCP"],
+                        "parameters": [
+                            {
+                                "name": "business_slug",
+                                "in": "path",
+                                "required": True,
+                                "schema": {"type": "string"},
+                            }
+                        ],
+                        "requestBody": {
+                            "required": True,
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "receiver": {"type": "integer"},
+                                            "rows": {"type": "array"},
+                                        },
+                                        "required": ["receiver"],
+                                    }
+                                }
+                            },
+                        },
+                        "responses": {"201": {"description": "OK"}},
+                    }
+                }
+            },
+        },
+    )
+    server = create_server(config)
+    tools = {tool.name for tool in asyncio.run(server.list_tools())}
+    assert "invoice_create_form" in tools
+    assert "invoice_create_submit" in tools
+
+
+def test_build_form_defaults_applies_preset_values() -> None:
+    defaults = _build_form_defaults(
+        business_slug="demo-930bf1",
+        preset={
+            "receiver": 42,
+            "invoicing_date": "2026-04-03",
+            "payment_condition_days": 7,
+            "rows": [{"name": "Consulting", "amount": 1500, "product_count": 2}],
+        },
+    )
+    assert defaults["business_slug"] == "demo-930bf1"
+    assert defaults["receiver"] == "42"
+    assert defaults["row_name"] == "Consulting"
+    assert defaults["row_amount"] == "1500"
+    assert defaults["row_product_count"] == "2"
+    assert defaults["preset_warnings"] == []
+
+
+def test_build_invoice_payload_reports_row_errors() -> None:
+    result = _build_invoice_payload(
+        receiver="12",
+        invoicing_date="2026-04-03",
+        payment_condition_days="14",
+        reference=None,
+        description=None,
+        contact_person=None,
+        seller_reference=None,
+        buyer_reference=None,
+        row_name="",
+        row_unit="kpl",
+        row_amount="",
+        row_product_count="1",
+        row_vat_rate=None,
+        row_description=None,
+        extra_payload_json=None,
+        invoice_payload=None,
+        preset_payload=None,
+    )
+    assert result["errors"]
+    assert "Either provide row fields" in result["errors"][0]
+
+
+def test_build_non_ui_form_payload_includes_submit_tool() -> None:
+    defaults = _build_form_defaults(
+        business_slug="demo-930bf1",
+        preset={"receiver": 12},
+    )
+    payload = _build_non_ui_form_payload(
+        defaults=defaults,
+        submit_tool_name="invoice_create_submit",
+    )
+    assert payload["mode"] == "fallback_form"
+    assert payload["submit_tool"] == "invoice_create_submit"
+    assert payload["prefill"]["business_slug"] == "demo-930bf1"
+    assert payload["ui_supported"] is False
+
+
+def test_parse_tool_error_handles_json_payload() -> None:
+    parsed = _parse_tool_error(
+        '{"summary":"Invalid request","status_code":400,"field_errors":{"receiver":["required"]}}'
+    )
+    assert parsed["summary"] == "Invalid request"
+    assert parsed["status_code"] == 400
+    assert parsed["field_errors"]["receiver"] == ["required"]
+
+
+def test_invoice_app_form_defaults_respects_preset() -> None:
+    defaults = _build_form_defaults(
+        business_slug="demo-930bf1",
+        preset={
+            "receiver": 77,
+            "rows": [
+                {
+                    "name": "Consulting",
+                    "amount": 1500.0,
+                    "unit": "h",
+                    "product_count": 10,
+                }
+            ],
+        },
+    )
+    assert defaults["business_slug"] == "demo-930bf1"
+    assert defaults["receiver"] == "77"
+    assert defaults["row_name"] == "Consulting"
+    assert defaults["row_amount"] == "1500.0"
+    assert defaults["row_unit"] == "h"
+    assert defaults["preset_warnings"] == []
+
+
+def test_invoice_app_payload_builder_reports_invalid_inputs() -> None:
+    result = _build_invoice_payload(
+        receiver="not-an-int",
+        invoicing_date="2026-01-01",
+        payment_condition_days="14",
+        reference=None,
+        description=None,
+        contact_person=None,
+        seller_reference=None,
+        buyer_reference=None,
+        row_name="",
+        row_unit="kpl",
+        row_amount="abc",
+        row_product_count="1",
+        row_vat_rate=None,
+        row_description=None,
+        extra_payload_json='{"x": 1}',
+        invoice_payload=None,
+        preset_payload=None,
+    )
+    assert result["errors"]
+    assert any("receiver" in issue for issue in result["errors"])
+    assert any("row_amount" in issue for issue in result["errors"])
+
+
+def test_invoice_app_non_ui_payload_shape() -> None:
+    defaults = {
+        "business_slug": "demo-930bf1",
+        "receiver": "10",
+        "invoicing_date": "2026-01-01",
+        "payment_condition_days": "14",
+        "reference": "",
+        "description": "",
+        "contact_person": "",
+        "seller_reference": "",
+        "buyer_reference": "",
+        "row_name": "Service",
+        "row_unit": "kpl",
+        "row_amount": "100.00",
+        "row_product_count": "1",
+        "row_vat_rate": "",
+        "row_description": "",
+        "extra_payload_json": "",
+        "preset_payload": {},
+        "preset_warnings": ["warning"],
+    }
+    payload = _build_non_ui_form_payload(
+        defaults=defaults,
+        submit_tool_name="invoice_create_submit",
+    )
+    assert payload["mode"] == "fallback_form"
+    assert payload["ui_supported"] is False
+    assert payload["submit_tool"] == "invoice_create_submit"
+    assert payload["warnings"] == ["warning"]
+    assert payload["prefill"]["receiver"] == "10"
+
+
+def test_invoice_app_parse_tool_error_handles_json_payload() -> None:
+    parsed = _parse_tool_error(
+        '{"summary":"Validation failed","status_code":400,'
+        '"field_errors":{"receiver":["required"]}}'
+    )
+    assert parsed["summary"] == "Validation failed"
+    assert parsed["status_code"] == 400
+    assert parsed["field_errors"] == {"receiver": ["required"]}

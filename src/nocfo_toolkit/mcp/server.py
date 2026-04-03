@@ -24,6 +24,7 @@ from nocfo_toolkit.mcp.auth import (
     build_remote_auth_provider,
 )
 from nocfo_toolkit.mcp.http_error_capture import capture_http_error_response
+from nocfo_toolkit.mcp.invoice_app import register_invoice_app_capability
 from nocfo_toolkit.mcp.middleware import MCPToolErrorMiddleware
 from nocfo_toolkit.openapi import (
     MCP_RESOURCE_TAG,
@@ -236,7 +237,7 @@ def create_server(
                 required_scopes=opts.required_scopes,
             )
 
-    return FastMCP.from_openapi(
+    server = FastMCP.from_openapi(
         openapi_spec=filtered_spec,
         client=client,
         name=opts.name,
@@ -247,6 +248,9 @@ def create_server(
         mcp_component_fn=component_mapper,
         validate_output=True,
     )
+    # Additive invoice app capability layered on top of the existing OpenAPI tools.
+    register_invoice_app_capability(server)
+    return server
 
 
 def run_server(
