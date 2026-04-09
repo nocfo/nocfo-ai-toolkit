@@ -66,26 +66,16 @@ def _normalize_mcp_namespace_token(value: str) -> str:
 def build_mcp_component_name(
     operation_id: str, extensions: dict[str, Any] | None
 ) -> str:
-    """Build MCP name ``<x-mcp-namespace>_<operation_id_with_dots_as_underscores>``.
+    """Build MCP component name from ``operation_id``.
 
-    Namespace is read from the OpenAPI operation extension ``x-mcp-namespace`` (set in
-    the backend via ``mcp_extend_schema``). If missing, ``operation_id`` is
-    returned unchanged.
+    Namespace extension values are preserved in metadata but are not used for
+    display-name generation to keep backend ``operationId`` as the single source
+    of truth.
     """
+    del extensions
     if not operation_id or not str(operation_id).strip():
         return operation_id
-    raw = (extensions or {}).get(X_MCP_NAMESPACE)
-    if not isinstance(raw, str) or not raw.strip():
-        return operation_id
-    ns = _normalize_mcp_namespace_token(raw)
-    if not ns:
-        return operation_id
-    # Avoid duplicating the namespace if operation_id already starts with it.
-    # Example: operation_id "invoicing.contact.create" with ns "invoicing"
-    # should become "invoicing_contact_create", not "invoicing_invoicing_contact_create".
-    if operation_id.startswith(f"{ns}."):
-        operation_id = operation_id[len(ns) + 1 :]
-    return f"{ns}_{operation_id.replace('.', '_')}"
+    return operation_id.replace(".", "_")
 
 
 def _resource_uri_with_name(uri: str | AnyUrl, display_name: str) -> AnyUrl:

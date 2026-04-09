@@ -247,23 +247,23 @@ def test_openapi_provider_maps_mcp_get_to_resources() -> None:
     assert len(provider._templates) == 0
 
 
-def test_build_mcp_component_name_uses_x_mcp_namespace_extension() -> None:
+def test_build_mcp_component_name_uses_operation_id_only() -> None:
     assert (
         build_mcp_component_name(
             "a.b.c",
             {X_MCP_NAMESPACE: "invoicing"},
         )
-        == "invoicing_a_b_c"
+        == "a_b_c"
     )
 
 
-def test_build_mcp_component_name_normalizes_namespace_token() -> None:
+def test_build_mcp_component_name_ignores_namespace_token() -> None:
     assert (
         build_mcp_component_name(
             "x.y",
             {X_MCP_NAMESPACE: "Balance Sheet"},
         )
-        == "balance_sheet_x_y"
+        == "x_y"
     )
 
 
@@ -273,12 +273,12 @@ def test_build_mcp_component_name_fallback_when_extension_missing() -> None:
             "bookkeeping.item.create",
             {},
         )
-        == "bookkeeping.item.create"
+        == "bookkeeping_item_create"
     )
 
 
 def test_build_mcp_component_name_fallback_when_no_extensions() -> None:
-    assert build_mcp_component_name("foo.bar", None) == "foo.bar"
+    assert build_mcp_component_name("foo.bar", None) == "foo_bar"
 
 
 def test_filter_mcp_spec_prefers_backend_component_type_extension() -> None:
