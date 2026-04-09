@@ -16,6 +16,7 @@ from nocfo_toolkit.mcp.server import (
     build_mcp_component_name,
     create_server,
     MCPServerOptions,
+    restore_openapi_output_schema,
 )
 from nocfo_toolkit.openapi import X_MCP_COMPONENT_TYPE, filter_mcp_spec
 
@@ -214,13 +215,14 @@ def test_openapi_provider_maps_mcp_get_to_resources() -> None:
     def _apply_component_mcp_metadata(route, component) -> None:
         apply_mcp_namespace_names(route, component)
         apply_mcp_operation_metadata(route, component)
+        restore_openapi_output_schema(route, component)
 
     provider = OpenAPIProvider(
         openapi_spec=filtered,
         client=client,
         route_maps=MCP_OPENAPI_ROUTE_MAPS,
         mcp_component_fn=_apply_component_mcp_metadata,
-        validate_output=True,
+        validate_output=False,
     )
 
     assert len(provider._tools) == 1

@@ -46,7 +46,7 @@ def test_validate_openapi_mcp_contract_success() -> None:
         },
     }
 
-    result = validate_openapi_mcp_contract(spec, validate_output=True)
+    result = validate_openapi_mcp_contract(spec, validate_output=False)
 
     assert result.is_valid is True
     assert result.mcp_operation_count == 3

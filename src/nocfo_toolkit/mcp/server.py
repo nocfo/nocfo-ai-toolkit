@@ -32,6 +32,8 @@ from nocfo_toolkit.openapi import (
     load_openapi_spec,
 )
 
+from fastmcp.utilities.openapi import extract_output_schema_from_responses
+
 if TYPE_CHECKING:
     from fastmcp import FastMCP
 
@@ -133,6 +135,29 @@ def apply_mcp_operation_metadata(route: Any, component: Any) -> None:
     component.meta = meta
 
 
+def restore_openapi_output_schema(route: Any, component: Any) -> None:
+    """Restore the real OpenAPI output schema on tools for agent-facing metadata.
+
+    When ``validate_output=False`` FastMCP replaces the output schema with a
+    permissive fallback so that runtime responses are never rejected.  This
+    function re-derives the accurate schema from the route and writes it back
+    onto the tool so that ``tools/list`` still exposes precise type information
+    to the agent — without enforcing it at call time.
+    """
+    if not isinstance(component, Tool):
+        return
+    responses = getattr(route, "responses", None)
+    if responses is None:
+        return
+    real_schema = extract_output_schema_from_responses(
+        responses,
+        getattr(route, "response_schemas", None),
+        getattr(route, "openapi_version", None),
+    )
+    if real_schema is not None:
+        component.output_schema = real_schema
+
+
 def _get_server_instructions(openapi_spec: dict[str, Any]) -> str | None:
     """Read backend-owned MCP server instructions from OpenAPI root extensions."""
     instructions = openapi_spec.get(X_NOCFO_MCP_SERVER_INSTRUCTIONS)
@@ -229,6 +254,7 @@ def create_server(
     def component_mapper(route: Any, component: Any) -> None:
         apply_mcp_namespace_names(route, component)
         apply_mcp_operation_metadata(route, component)
+        restore_openapi_output_schema(route, component)
         if opts.auth_mode == "oauth" and isinstance(
             component, (Tool, OpenAPIResource, OpenAPIResourceTemplate)
         ):
@@ -246,7 +272,7 @@ def create_server(
         middleware=[MCPToolErrorMiddleware()],
         route_maps=MCP_OPENAPI_ROUTE_MAPS,
         mcp_component_fn=component_mapper,
-        validate_output=True,
+        validate_output=False,
     )
 
 

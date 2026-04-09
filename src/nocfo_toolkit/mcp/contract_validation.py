@@ -13,6 +13,7 @@ from nocfo_toolkit.mcp.server import (
     MCP_OPENAPI_ROUTE_MAPS,
     apply_mcp_operation_metadata,
     apply_mcp_namespace_names,
+    restore_openapi_output_schema,
 )
 from nocfo_toolkit.openapi import filter_mcp_spec
 
@@ -35,6 +36,7 @@ class MCPContractValidationResult:
 def _apply_component_mcp_metadata(route: Any, component: Any) -> None:
     apply_mcp_namespace_names(route, component)
     apply_mcp_operation_metadata(route, component)
+    restore_openapi_output_schema(route, component)
 
 
 def _get_base_url(openapi_spec: dict[str, Any]) -> str:
@@ -146,7 +148,7 @@ def _build_result(
 def validate_openapi_mcp_contract(
     openapi_spec: dict[str, Any],
     *,
-    validate_output: bool = True,
+    validate_output: bool = False,
 ) -> MCPContractValidationResult:
     """Validate that MCP-tagged operations map cleanly to FastMCP components.
 
@@ -186,7 +188,7 @@ def validate_openapi_mcp_contract(
 def assert_openapi_mcp_contract_valid(
     openapi_spec: dict[str, Any],
     *,
-    validate_output: bool = True,
+    validate_output: bool = False,
 ) -> MCPContractValidationResult:
     """Assert MCP contract validity and return the validation result."""
     result = validate_openapi_mcp_contract(
