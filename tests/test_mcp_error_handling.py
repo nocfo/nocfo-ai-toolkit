@@ -117,3 +117,12 @@ def test_capture_http_error_response_reads_unread_streaming_response() -> None:
     asyncio.run(capture_http_error_response(response))
 
     assert response.json() == {"detail": "streamed failure"}
+
+
+def test_capture_http_error_response_reads_success_streaming_response() -> None:
+    request = httpx.Request("GET", "https://api.example.com/v1/businesses/")
+    response = httpx.Response(200, request=request, stream=_UnreadAsyncStream())
+
+    asyncio.run(capture_http_error_response(response))
+
+    assert response.json() == {"detail": "streamed failure"}
