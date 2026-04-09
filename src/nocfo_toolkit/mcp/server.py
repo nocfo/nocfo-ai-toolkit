@@ -221,7 +221,7 @@ def create_server(
     else:
         client = _create_pat_client(config, opts.timeout_seconds)
         server_auth = None
-    
+
     spec = load_openapi_spec(base_url=config.base_url)
     filtered_spec = filter_mcp_spec(spec, mcp_tag="MCP")
     server_instructions = _get_server_instructions(spec)

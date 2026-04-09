@@ -142,9 +142,7 @@
               "value": "demo-bfa195"
             }
           ],
-          "granted_permission_ids": [
-            "admin"
-          ],
+          "granted_permission_ids": ["admin"],
           "granted_permissions": [
             {
               "id": "admin",
@@ -168,9 +166,7 @@
       ],
       "data": {
         "business_slug": "demo-bfa195",
-        "granted_permission_ids": [
-          "admin"
-        ],
+        "granted_permission_ids": ["admin"],
         "granted_permissions": [
           {
             "id": "admin",
@@ -236,9 +232,7 @@
               ],
               "expense_entries": []
             },
-            "tag_ids": [
-              3
-            ],
+            "tag_ids": [3],
             "relations": [],
             "workflow": {
               "workflow_status": "draft_with_active_suggestion",
@@ -314,9 +308,7 @@
               ],
               "expense_entries": []
             },
-            "tag_ids": [
-              4
-            ],
+            "tag_ids": [4],
             "relations": [],
             "workflow": {
               "workflow_status": "finalized",
@@ -872,9 +864,7 @@
           ],
           "expense_entries": []
         },
-        "tag_ids": [
-          4
-        ],
+        "tag_ids": [4],
         "relations": [],
         "workflow": {
           "workflow_status": "finalized",
@@ -950,9 +940,7 @@
           ],
           "expense_entries": []
         },
-        "tag_ids": [
-          3
-        ],
+        "tag_ids": [3],
         "relations": [],
         "workflow": {
           "workflow_status": "draft_with_active_suggestion",
@@ -1000,9 +988,7 @@
         "document_id": 12,
         "description": "MCP draft no suggestion (updated via MCP test)",
         "contact_id": 2,
-        "tag_ids": [
-          4
-        ]
+        "tag_ids": [4]
       },
       "ok": true,
       "is_error": false,
@@ -1046,9 +1032,7 @@
           ],
           "expense_entries": []
         },
-        "tag_ids": [
-          4
-        ],
+        "tag_ids": [4],
         "relations": [],
         "workflow": {
           "workflow_status": "finalized",
@@ -1265,23 +1249,16 @@
       "draft_no_status": "finalized",
       "draft_no_has_active": false,
       "draft_no_recommended": "edit_document",
-      "draft_no_actions": [
-        "edit_document"
-      ],
+      "draft_no_actions": ["edit_document"],
       "draft_with_status": "draft_with_active_suggestion",
       "draft_with_has_active": true,
       "draft_with_active_id": 36,
       "draft_with_recommended": "finalize_active_suggestion",
-      "draft_with_actions": [
-        "edit_document",
-        "finalize_active_suggestion"
-      ],
+      "draft_with_actions": ["edit_document", "finalize_active_suggestion"],
       "update_ok": true,
       "update_description": "MCP draft no suggestion (updated via MCP test)",
       "update_contact_id": 2,
-      "update_tag_ids": [
-        4
-      ],
+      "update_tag_ids": [4],
       "update_preferred_action": "edit_document",
       "update_recommended_action": "edit_document",
       "update_recommended_flags": {
