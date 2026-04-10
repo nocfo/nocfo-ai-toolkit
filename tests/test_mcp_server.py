@@ -16,6 +16,7 @@ from nocfo_toolkit.mcp.server import (
     build_mcp_component_name,
     create_server,
     MCPServerOptions,
+    run_http_server,
     restore_openapi_output_schema,
 )
 from nocfo_toolkit.openapi import X_MCP_COMPONENT_TYPE, filter_mcp_spec
@@ -299,3 +300,31 @@ def test_filter_mcp_spec_prefers_backend_component_type_extension() -> None:
     tags = filtered["paths"]["/v1/non-get-as-resource/"]["post"]["tags"]
     assert "MCP_RESOURCE" in tags
     assert "MCP_TOOL" not in tags
+
+
+def test_run_http_server_forwards_stateless_http(monkeypatch) -> None:
+    config = ToolkitConfig(base_url="http://localhost:8000")
+
+    class DummyServer:
+        def run(self, **kwargs) -> None:
+            captured_kwargs.update(kwargs)
+
+    captured_kwargs: dict[str, object] = {}
+    monkeypatch.setattr(
+        "nocfo_toolkit.mcp.server.create_server",
+        lambda config, options=None: DummyServer(),
+    )
+
+    run_http_server(
+        config,
+        host="127.0.0.1",
+        port=9000,
+        path="/mcp",
+        options=MCPServerOptions(stateless_http=True),
+    )
+
+    assert captured_kwargs["transport"] == "http"
+    assert captured_kwargs["host"] == "127.0.0.1"
+    assert captured_kwargs["port"] == 9000
+    assert captured_kwargs["path"] == "/mcp"
+    assert captured_kwargs["stateless_http"] is True

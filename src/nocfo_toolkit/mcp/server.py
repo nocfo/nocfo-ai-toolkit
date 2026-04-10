@@ -168,6 +168,7 @@ class MCPServerOptions:
     jwt_exchange_path: str = "/auth/jwt/"
     token_refresh_skew_seconds: int = 60
     required_scopes: tuple[str, ...] = ()
+    stateless_http: bool = False
 
 
 def _create_pat_client(
@@ -288,7 +289,14 @@ def run_http_server(
     """Run NoCFO MCP server over streamable HTTP transport."""
 
     server = create_server(config, options=options)
-    server.run(transport="http", host=host, port=port, path=path)
+    opts = options or MCPServerOptions()
+    server.run(
+        transport="http",
+        host=host,
+        port=port,
+        path=path,
+        stateless_http=opts.stateless_http,
+    )
 
 
 async def run_server_async(

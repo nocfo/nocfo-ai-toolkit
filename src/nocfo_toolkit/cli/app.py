@@ -103,6 +103,14 @@ def run_mcp_server(
         "--required-scopes",
         help="Comma-separated OAuth scopes required for MCP tools.",
     ),
+    stateless_http: bool = typer.Option(
+        False,
+        "--stateless-http/--stateful-http",
+        help=(
+            "Use stateless streamable HTTP mode (recommended behind "
+            "load balancers with multiple MCP tasks)."
+        ),
+    ),
 ) -> None:
     """Run NoCFO MCP server over stdio or HTTP transport.
 
@@ -135,6 +143,7 @@ def run_mcp_server(
         auth_mode=auth_mode_value,
         mcp_base_url=mcp_base_url or os.getenv("NOCFO_MCP_BASE_URL"),
         required_scopes=scope_items,
+        stateless_http=stateless_http,
     )
 
     if transport_normalized == "http":
