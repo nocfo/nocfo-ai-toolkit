@@ -7,9 +7,9 @@ from typing import Any
 
 import httpx
 
-_LAST_HTTP_ERROR: contextvars.ContextVar[
-    dict[str, Any] | None
-] = contextvars.ContextVar("nocfo_last_http_error", default=None)
+_LAST_HTTP_ERROR: contextvars.ContextVar[dict[str, Any] | None] = (
+    contextvars.ContextVar("nocfo_last_http_error", default=None)
+)
 
 
 def clear_last_http_error() -> None:

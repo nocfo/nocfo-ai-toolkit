@@ -11,6 +11,7 @@ from fastmcp.server.providers.openapi import OpenAPIProvider
 
 from nocfo_toolkit.mcp.server import (
     MCP_OPENAPI_ROUTE_MAPS,
+    _client_event_hooks,
     apply_mcp_operation_metadata,
     apply_mcp_namespace_names,
     restore_openapi_output_schema,
@@ -160,7 +161,10 @@ def validate_openapi_mcp_contract(
         filtered_spec
     )
 
-    client = httpx.AsyncClient(base_url=_get_base_url(openapi_spec))
+    client = httpx.AsyncClient(
+        base_url=_get_base_url(openapi_spec),
+        event_hooks=_client_event_hooks(),
+    )
     try:
         provider = OpenAPIProvider(
             openapi_spec=filtered_spec,

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import httpx
 import pytest
 
@@ -9,8 +11,12 @@ from starlette.testclient import TestClient
 from nocfo_toolkit.config import OutputFormat, TokenSource, ToolkitConfig
 from nocfo_toolkit.mcp.server import (
     MCP_OPENAPI_ROUTE_MAPS,
+    MCP_RUNTIME_CONTRACT_HEADER,
+    MCP_RUNTIME_CONTRACT_VALUE,
     X_NOCFO_MCP_SERVER_INSTRUCTIONS,
     X_MCP_NAMESPACE,
+    _inject_mcp_runtime_contract_header,
+    _request_requires_mcp_runtime_contract_header,
     apply_mcp_operation_metadata,
     apply_mcp_namespace_names,
     build_mcp_component_name,
@@ -41,6 +47,33 @@ def test_filter_mcp_spec_keeps_only_mcp_tagged_operations() -> None:
     assert "get" in filtered["paths"]["/v1/a/"]
     assert "post" not in filtered["paths"]["/v1/a/"]
     assert "/v1/b/" not in filtered["paths"]
+
+
+def test_runtime_contract_header_is_added_for_regular_v1_mcp_operations() -> None:
+    request = httpx.Request("POST", "https://api.example.com/v1/user/")
+
+    asyncio.run(_inject_mcp_runtime_contract_header(request))
+
+    assert request.headers[MCP_RUNTIME_CONTRACT_HEADER] == MCP_RUNTIME_CONTRACT_VALUE
+
+
+def test_runtime_contract_header_is_not_added_for_v1_mcp_paths() -> None:
+    request = httpx.Request(
+        "GET", "https://api.example.com/v1/mcp/business/demo/accounts/"
+    )
+
+    asyncio.run(_inject_mcp_runtime_contract_header(request))
+
+    assert MCP_RUNTIME_CONTRACT_HEADER not in request.headers
+
+
+def test_runtime_contract_header_requirement_uses_path_shape_only() -> None:
+    assert _request_requires_mcp_runtime_contract_header(
+        httpx.Request("GET", "https://api.example.com/v1/user/")
+    )
+    assert not _request_requires_mcp_runtime_contract_header(
+        httpx.Request("GET", "https://api.example.com/v1/mcp/business/demo/accounts/")
+    )
 
 
 def test_create_server_requires_token() -> None:
