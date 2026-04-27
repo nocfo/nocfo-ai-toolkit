@@ -49,6 +49,8 @@ MCP_OPENAPI_ROUTE_MAPS: list[RouteMap] = [
 X_MCP_NAMESPACE = "x-mcp-namespace"
 _X_MCP_PREFIX = "x-mcp-"
 X_NOCFO_MCP_SERVER_INSTRUCTIONS = "x-nocfo-mcp-server-instructions"
+MCP_RUNTIME_CONTRACT_HEADER = "X-Nocfo-MCP-Contract"
+MCP_RUNTIME_CONTRACT_VALUE = "1"
 
 
 def _normalize_mcp_namespace_token(value: str) -> str:
@@ -157,6 +159,27 @@ def _get_server_instructions(openapi_spec: dict[str, Any]) -> str | None:
     return cleaned or None
 
 
+def _request_requires_mcp_runtime_contract_header(request: httpx.Request) -> bool:
+    path = str(request.url.path or "").strip()
+    return path.startswith("/v1/") and not path.startswith("/v1/mcp/")
+
+
+async def _inject_mcp_runtime_contract_header(request: httpx.Request) -> None:
+    if not _request_requires_mcp_runtime_contract_header(request):
+        return
+    request.headers.setdefault(
+        MCP_RUNTIME_CONTRACT_HEADER,
+        MCP_RUNTIME_CONTRACT_VALUE,
+    )
+
+
+def _client_event_hooks() -> dict[str, list[Any]]:
+    return {
+        "request": [_inject_mcp_runtime_contract_header],
+        "response": [capture_http_error_response],
+    }
+
+
 @dataclass(frozen=True)
 class MCPServerOptions:
     """MCP server configuration options."""
@@ -184,7 +207,7 @@ def _create_pat_client(
         base_url=config.base_url,
         headers={"Authorization": f"{AUTH_HEADER_SCHEME} {resolved_token}"},
         timeout=timeout_seconds,
-        event_hooks={"response": [capture_http_error_response]},
+        event_hooks=_client_event_hooks(),
     )
 
 
@@ -202,7 +225,7 @@ def _create_oauth_client(
             refresh_skew_seconds=refresh_skew_seconds,
         ),
         timeout=timeout_seconds,
-        event_hooks={"response": [capture_http_error_response]},
+        event_hooks=_client_event_hooks(),
     )
 
 
