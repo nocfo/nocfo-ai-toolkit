@@ -33,9 +33,16 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
   exit 1
 fi
 
-if [[ -n "$(git ls-files --others --exclude-standard)" ]]; then
-  echo "Error: untracked files detected. Commit/stash/remove before release."
-  exit 1
+UNTRACKED_FILES="$(git ls-files --others --exclude-standard)"
+if [[ -n "${UNTRACKED_FILES}" ]]; then
+  if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
+    echo "Info: untracked files present in CI workspace; continuing."
+    printf '%s\n' "${UNTRACKED_FILES}"
+  else
+    echo "Error: untracked files detected. Commit/stash/remove before release."
+    printf '%s\n' "${UNTRACKED_FILES}"
+    exit 1
+  fi
 fi
 
 CURRENT_COMMIT="$(git rev-parse HEAD)"
