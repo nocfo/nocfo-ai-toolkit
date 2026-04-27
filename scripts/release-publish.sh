@@ -24,6 +24,6 @@ fi
 echo "Publishing PyPI package version ${VERSION}..."
 poetry version "${VERSION}"
 poetry build
-poetry publish --no-interaction --no-ansi
+poetry publish --skip-existing --no-interaction --no-ansi
 
 echo "Release publish completed for ${BUILD_TAG} (${VERSION})"
