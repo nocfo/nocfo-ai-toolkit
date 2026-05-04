@@ -159,6 +159,31 @@ nocfo --output json businesses list
 
 ## Advanced / Technical
 
+### MCP tool surface
+
+The MCP server exposes a curated workflow surface instead of mirroring the
+backend API one-to-one. Tool names keep the NoCFO namespaces (`common_*`,
+`bookkeeping_*`, `invoicing_*`, `reporting_*`, `constants_*`, `docs_*`), but
+arguments prefer user-facing identifiers:
+
+- use account numbers such as `1910`, not account IDs
+- use document and invoice numbers when users refer to documents or invoices
+- use tag names and contact names/emails for search and filtering
+- use `business="current"` unless the user explicitly chooses another business
+
+List tools return Linear-style pagination with `limit` and opaque `cursor`
+arguments. Responses include `page_info.has_next_page` and
+`page_info.next_cursor`.
+
+Permission checks are not exposed as planning tools. If an API call is rejected,
+the MCP returns a structured error with `error_type`, `message`, `hint`, and,
+when available for `403`, the current user's permissions for that business.
+
+For bookkeeping documents, `blueprint` means the editable posting plan used for
+create/update workflows. `entries` are the realized journal lines generated from
+the blueprint and are read-only through MCP. Use `docs_blueprint` for a concise
+schema guide before mutating document bookkeeping.
+
 ### MCP server modes
 
 - `nocfo mcp` = local stdio mode
@@ -202,12 +227,6 @@ Default output format: `table`
 poetry install                # install dependencies
 poetry run pytest             # run tests
 poetry run nocfo --help       # run CLI locally
-```
-
-Regenerate OpenAPI-based command stubs:
-
-```bash
-poetry run python scripts/generate_cli_commands.py
 ```
 
 <details>

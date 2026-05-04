@@ -17,7 +17,7 @@ import httpx
 from fastmcp.server.auth import AccessToken, RemoteAuthProvider, TokenVerifier
 from fastmcp.server.auth.providers.introspection import IntrospectionTokenVerifier
 from fastmcp.server.auth.providers.jwt import JWTVerifier
-from fastmcp.server.dependencies import get_access_token
+from fastmcp.server.dependencies import get_access_token, get_http_headers
 from fastmcp.utilities.components import FastMCPComponent
 from starlette.datastructures import MutableHeaders
 from starlette.responses import JSONResponse, Response
@@ -44,6 +44,12 @@ def _split_csv(raw: str | None) -> list[str]:
     if not raw:
         return []
     return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def _incoming_mcp_client() -> str | None:
+    headers = get_http_headers(include={"x-nocfo-client"})
+    nocfo_client = (headers.get("x-nocfo-client") or "").strip()
+    return nocfo_client or None
 
 
 @dataclass(frozen=True)
@@ -306,6 +312,7 @@ class JwtExchangeAuth(httpx.Auth):
         bearer_token = access.token if access else None
         if not bearer_token:
             raise RuntimeError("Missing OAuth bearer token for MCP request.")
+        incoming_nocfo_client = _incoming_mcp_client()
 
         claims = access.claims if access and isinstance(access.claims, dict) else {}
         cache_key = self._cache_key(bearer_token, claims)
@@ -325,6 +332,11 @@ class JwtExchangeAuth(httpx.Auth):
                             "Authorization": f"Bearer {bearer_token}",
                             "Content-Type": "application/json",
                             "Accept": "application/json",
+                            **(
+                                {"x-nocfo-client": incoming_nocfo_client}
+                                if incoming_nocfo_client
+                                else {}
+                            ),
                         },
                         content=b"{}",
                     )
@@ -370,6 +382,23 @@ class JwtExchangeAuth(httpx.Auth):
                     self._cache[cache_key] = (jwt_token, self._decode_exp(jwt_token))
 
         request.headers["Authorization"] = f"{AUTH_HEADER_SCHEME} {jwt_token}"
+        if incoming_nocfo_client:
+            request.headers["x-nocfo-client"] = incoming_nocfo_client
+        yield request
+
+
+class PassthroughAuth(httpx.Auth):
+    """Forward incoming HTTP Authorization header to downstream API requests."""
+
+    async def async_auth_flow(self, request: httpx.Request):
+        headers = get_http_headers(include={"authorization", "x-nocfo-client"})
+        authorization = headers.get("authorization")
+        if not authorization:
+            raise RuntimeError("Missing Authorization header for MCP passthrough mode.")
+        request.headers["Authorization"] = authorization
+        nocfo_client = (headers.get("x-nocfo-client") or "").strip()
+        if nocfo_client:
+            request.headers["x-nocfo-client"] = nocfo_client
         yield request
 
 
@@ -546,7 +575,7 @@ def apply_tool_auth_metadata(
 ) -> None:
     """Attach explicit auth metadata so connector UIs can trigger linking flows.
 
-    Applies to tools, resources, and resource templates from the OpenAPI provider.
+    Applies to tools, resources, and resource templates exposed by MCP.
     """
 
     meta: dict[str, Any] = dict(component.meta or {})

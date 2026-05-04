@@ -15,14 +15,26 @@ This document describes the implemented auth flow for running `nocfo mcp` in rem
 - MCP then calls NoCFO APIs with:
   - `Authorization: Token <jwt>`.
 
+## Business Scope
+
+MCP tools default to `business="current"`:
+
+- In local JWT/PAT mode, the toolkit decodes a `business_slug` claim from
+  `NOCFO_JWT_TOKEN` when present and uses that as the current business.
+- In OAuth mode, the exchanged JWT is used for downstream calls. If the token
+  or API context cannot identify one current business, the MCP lists accessible
+  businesses and resolves automatically only when there is exactly one.
+- If multiple businesses are possible, tools return
+  `business_context_required` with compact candidates so the assistant can ask
+  the user which company to use.
+
 ## Tool Auth Signaling
 
-In OAuth mode, generated MCP tools include metadata:
-
-- `securitySchemes`: `[{"type": "oauth2", "scopes": [...]?}]`
-- `mcp/www_authenticate`: `"Bearer"`
-
-This allows connector UIs to detect auth requirements and trigger linking flows.
+The server itself remains OAuth-protected in remote mode through FastMCP
+protected-resource metadata. Individual tools do not expose upfront permission
+requirements or permission-planning metadata. The assistant should call the
+requested tool and rely on structured API errors when the current user lacks
+permission.
 
 ## CLI Usage
 

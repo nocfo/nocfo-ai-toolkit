@@ -18,7 +18,6 @@ from nocfo_toolkit.cli.commands import (
     products,
     purchase_invoices,
     reports,
-    schema,
     tags,
     user,
 )
@@ -88,7 +87,10 @@ def run_mcp_server(
     auth_mode: str = typer.Option(
         "pat",
         "--auth-mode",
-        help="Server auth mode: pat (legacy) or oauth (Claude/OpenAI remote).",
+        help=(
+            "Server auth mode: pat (static token), oauth (remote connector), "
+            "or passthrough (forward incoming Authorization header)."
+        ),
     ),
     mcp_base_url: str | None = typer.Option(
         None,
@@ -111,10 +113,19 @@ def run_mcp_server(
             "load balancers with multiple MCP tasks)."
         ),
     ),
+    tool_search: bool = typer.Option(
+        True,
+        "--tool-search/--no-tool-search",
+        help=(
+            "Enable FastMCP Tool Search transform to reduce tool-catalog "
+            "context by exposing search_tools + call_tool."
+        ),
+    ),
 ) -> None:
     """Run NoCFO MCP server over stdio or HTTP transport.
 
     Stdio mode accepts either NOCFO_JWT_TOKEN or NOCFO_API_TOKEN.
+    Optional NOCFO_CLIENT overrides default `nocfo-mcp` x-nocfo-client.
     HTTP oauth mode uses connector bearer verification + JWT exchange flow.
     """
 
@@ -122,8 +133,10 @@ def run_mcp_server(
 
     command_ctx = get_context(ctx)
     auth_mode_normalized = auth_mode.strip().lower()
-    if auth_mode_normalized not in {"pat", "oauth"}:
-        raise typer.BadParameter("--auth-mode must be either 'pat' or 'oauth'.")
+    if auth_mode_normalized not in {"pat", "oauth", "passthrough"}:
+        raise typer.BadParameter(
+            "--auth-mode must be one of 'pat', 'oauth', or 'passthrough'."
+        )
 
     transport_normalized = transport.strip().lower()
     if transport_normalized not in {"stdio", "http"}:
@@ -132,18 +145,33 @@ def run_mcp_server(
         raise typer.BadParameter(
             "OAuth mode requires --transport http because remote connectors use HTTP."
         )
+    if auth_mode_normalized == "passthrough" and transport_normalized != "http":
+        raise typer.BadParameter(
+            "Passthrough mode requires --transport http because it forwards "
+            "incoming HTTP Authorization headers."
+        )
 
     scope_items = tuple(
         value.strip() for value in required_scopes.split(",") if value.strip()
     )
-    auth_mode_value: Literal["pat", "oauth"] = (
-        "oauth" if auth_mode_normalized == "oauth" else "pat"
+    auth_mode_value: Literal["pat", "oauth", "passthrough"] = (
+        "oauth"
+        if auth_mode_normalized == "oauth"
+        else ("passthrough" if auth_mode_normalized == "passthrough" else "pat")
     )
+    env_tool_search = os.getenv("NOCFO_MCP_TOOL_SEARCH", "").strip().lower()
+    tool_search_enabled = (
+        env_tool_search in {"1", "true", "yes", "on"}
+        if env_tool_search
+        else tool_search
+    )
+
     options = MCPServerOptions(
         auth_mode=auth_mode_value,
         mcp_base_url=mcp_base_url or os.getenv("NOCFO_MCP_BASE_URL"),
         required_scopes=scope_items,
         stateless_http=stateless_http,
+        tool_search=tool_search_enabled,
     )
 
     if transport_normalized == "http":
@@ -177,7 +205,6 @@ app.add_typer(files.app, name="files")
 app.add_typer(tags.app, name="tags")
 app.add_typer(user.app, name="user")
 app.add_typer(reports.app, name="reports")
-app.add_typer(schema.app, name="schema")
 
 
 if __name__ == "__main__":

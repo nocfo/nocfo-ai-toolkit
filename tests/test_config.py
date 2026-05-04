@@ -90,3 +90,25 @@ def test_load_config_rejects_invalid_jwt_env(
 
     with pytest.raises(ValueError, match="JWT token cannot contain whitespace"):
         load_config(store=store)
+
+
+def test_load_config_reads_nocfo_client_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = ConfigStore(path=tmp_path / "config.json")
+    monkeypatch.setenv("NOCFO_CLIENT", "my-mcp-agent/1.0")
+
+    config = load_config(store=store)
+
+    assert config.nocfo_client == "my-mcp-agent/1.0"
+
+
+def test_load_config_passes_through_nocfo_client_env_without_validation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = ConfigStore(path=tmp_path / "config.json")
+    monkeypatch.setenv("NOCFO_CLIENT", "custom mcp")
+
+    config = load_config(store=store)
+
+    assert config.nocfo_client == "custom mcp"

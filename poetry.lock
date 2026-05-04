@@ -545,6 +545,7 @@ packaging = ">=24.0"
 platformdirs = ">=4.0.0"
 py-key-value-aio = {version = ">=0.4.4,<0.5.0", extras = ["filetree", "keyring", "memory"]}
 pydantic = {version = ">=2.11.7", extras = ["email"]}
+pydantic-monty = {version = ">=0.0.7", optional = true, markers = "extra == \"code-mode\""}
 pyperclip = ">=1.9.0"
 python-dotenv = ">=1.1.0"
 pyyaml = ">=6.0,<7.0"
@@ -1301,6 +1302,80 @@ files = [
 
 [package.dependencies]
 typing-extensions = ">=4.14.1"
+
+[[package]]
+name = "pydantic-monty"
+version = "0.0.17"
+description = "Python bindings for the Monty sandboxed Python interpreter"
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "pydantic_monty-0.0.17-cp310-cp310-macosx_10_12_x86_64.whl", hash = "sha256:3c3b6c026d8a0437eeb4d6b2d908be75e2715e0555b9a13f076b7e9ba9bbae19"},
+    {file = "pydantic_monty-0.0.17-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:c80b4d34437abd209c042f81f8ecea81a097022fb9b01431ab859b877edfbc4d"},
+    {file = "pydantic_monty-0.0.17-cp310-cp310-manylinux_2_12_i686.manylinux2010_i686.whl", hash = "sha256:beecc1f7e5b10db40d7b2b24a68166a36514289a2402bfef370a7984e90a2ab8"},
+    {file = "pydantic_monty-0.0.17-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:64ea7babdcc9fba93089fa52589b6d0549f755e37500f6cf4aeaeb8e56328a3e"},
+    {file = "pydantic_monty-0.0.17-cp310-cp310-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:a7fe77a191205becb622eaecb075e8bcbbbe4dac20a916d9c58ce6d59a22a8da"},
+    {file = "pydantic_monty-0.0.17-cp310-cp310-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:2cdbefc180cc83c8b8415aaf95b9099bb2cb15261f40ebe2c92f13e7d52439a4"},
+    {file = "pydantic_monty-0.0.17-cp310-cp310-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:575ce5aa31db18bbbf6275f00e9b0c005ca393bfb73a2f306a577ad490ec2d98"},
+    {file = "pydantic_monty-0.0.17-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:e252ec54fc4728406045f7be36ca45dbea8e6856df9c6154b1b9821b8952dfa2"},
+    {file = "pydantic_monty-0.0.17-cp310-cp310-musllinux_1_1_aarch64.whl", hash = "sha256:fba71e5cb49f15a1446ecee142c8cc11f4bd6df4fcb4926465c83181474b2fd4"},
+    {file = "pydantic_monty-0.0.17-cp310-cp310-musllinux_1_1_x86_64.whl", hash = "sha256:69136647abd56f804987834e37573adcc5c3b3d05013b8b3a2939f44b3bd5199"},
+    {file = "pydantic_monty-0.0.17-cp310-cp310-win32.whl", hash = "sha256:d5b3beb6169b59adea10fdefb1e54bfa9a66165404891dfb6fcf16f7749cda3b"},
+    {file = "pydantic_monty-0.0.17-cp310-cp310-win_amd64.whl", hash = "sha256:50ed9561b6dd1a1863d4cac81e4eaca64cb10ab541aaab92fcb5996739bb8e7f"},
+    {file = "pydantic_monty-0.0.17-cp311-cp311-macosx_10_12_x86_64.whl", hash = "sha256:af890d691f6055491a4e643dd5bf09e07bd7a20ad70038531aada6415ab8794a"},
+    {file = "pydantic_monty-0.0.17-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:2f38a69858dfdd2c9474156616d05e25a288e2080aee24152fa40c19ad425f0e"},
+    {file = "pydantic_monty-0.0.17-cp311-cp311-manylinux_2_12_i686.manylinux2010_i686.whl", hash = "sha256:bb88264e291cee56770a775f57125538c4713c6d362e89ee63bff506f650a0df"},
+    {file = "pydantic_monty-0.0.17-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:54c317611454aba8be7ca96aeeea9429f4702a5c4ba89812bea82bed0d8e34fd"},
+    {file = "pydantic_monty-0.0.17-cp311-cp311-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:9563b5b4933f0f08c0e66ec66aaa4f43f2388bcc04b984e58aab2146dacd3829"},
+    {file = "pydantic_monty-0.0.17-cp311-cp311-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:35f267a501bc1910178a1515fdd3dd927273fbb44e44b8718cb3b33aee79f41b"},
+    {file = "pydantic_monty-0.0.17-cp311-cp311-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:35b000c52755f25f322ea7c4d079f09aa60635ffe24a6463899e423066a41bf3"},
+    {file = "pydantic_monty-0.0.17-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:61b517776ad13aa4580b1dd89188b18296ceeaf88256423563bbc99e804fd83f"},
+    {file = "pydantic_monty-0.0.17-cp311-cp311-musllinux_1_1_aarch64.whl", hash = "sha256:5da5362ef25665a23a3b13024497719f65cafa61d696cac76429f84701bee2e2"},
+    {file = "pydantic_monty-0.0.17-cp311-cp311-musllinux_1_1_x86_64.whl", hash = "sha256:7e655b6ddd552c02b751f1d57fc291fbd5654ff8b166a8bd634857879160d0b7"},
+    {file = "pydantic_monty-0.0.17-cp311-cp311-win32.whl", hash = "sha256:ea8b3ae8c42d572cefad841d3bda63cc458d9de2361cb9172914250e6dbe2c75"},
+    {file = "pydantic_monty-0.0.17-cp311-cp311-win_amd64.whl", hash = "sha256:3293c2f7524bfc7c3d8c794f1c1dc1eb4cf9c65a5e222061e2218ced85f3f6df"},
+    {file = "pydantic_monty-0.0.17-cp312-cp312-macosx_10_12_x86_64.whl", hash = "sha256:27c2254fa7a7b05e969f79578889230d293c62e0b1ee28371ec4f3c54b14426a"},
+    {file = "pydantic_monty-0.0.17-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:445cc471ce6f5a88ef06741b7ebc7002a2253d182f55a2f47094d4adedaaf497"},
+    {file = "pydantic_monty-0.0.17-cp312-cp312-manylinux_2_12_i686.manylinux2010_i686.whl", hash = "sha256:39121038405911f59da7bf61164251f59bad3fb1b0cd28f43c42c3949eee2c8a"},
+    {file = "pydantic_monty-0.0.17-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:dafc8ffe57c257002f623afdb7d0e41f73de850179ebd90b42611e4f2b6f9884"},
+    {file = "pydantic_monty-0.0.17-cp312-cp312-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:ea00838ef8f37dcd8085defcbdfe89fdd05297a6533f1d3f4cad857d13cedc7b"},
+    {file = "pydantic_monty-0.0.17-cp312-cp312-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:683d18089acf14d0de293245b9e37c7f0ec64e6d266f6773144211931aa3ec97"},
+    {file = "pydantic_monty-0.0.17-cp312-cp312-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:c1829993dd50cf497cbed66ea9f6c8ff7d157d22592a05c7399f92fb8a549e3c"},
+    {file = "pydantic_monty-0.0.17-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:8a7869e3f41a54cc588096c52a8a4de25ecd81e75c867ea4164b14ea1ae1a57f"},
+    {file = "pydantic_monty-0.0.17-cp312-cp312-musllinux_1_1_aarch64.whl", hash = "sha256:f9c17663e2c6f07aec5bc54cd7e39a9e20f250a97a9081e1b2b932eb00d0afc5"},
+    {file = "pydantic_monty-0.0.17-cp312-cp312-musllinux_1_1_x86_64.whl", hash = "sha256:5d2cf98afe2fb124f6ade91d9663d54277478cad417164f83df1854a41ef450c"},
+    {file = "pydantic_monty-0.0.17-cp312-cp312-win32.whl", hash = "sha256:b2185cc4effbbd6793eed4e0f0bcb6a3dbfbb3289ea4d47888708813f0a3dd47"},
+    {file = "pydantic_monty-0.0.17-cp312-cp312-win_amd64.whl", hash = "sha256:7833daed757ec9b09b627cc3577a4a76b114c5148f779531d7cfdb1095bcf0a9"},
+    {file = "pydantic_monty-0.0.17-cp313-cp313-macosx_10_12_x86_64.whl", hash = "sha256:e0cdac8c3c16477596bc96ee1cec4f2fbaccd089e2daa1e7b9f227cc89f97cb1"},
+    {file = "pydantic_monty-0.0.17-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:37290d6a1c35aba5cfb8b490bb31c0d822e8ddca8f3ca9ea068e30930d80dd1e"},
+    {file = "pydantic_monty-0.0.17-cp313-cp313-manylinux_2_12_i686.manylinux2010_i686.whl", hash = "sha256:49f252b2fb918686d3e8f76cb30245e782d1560a7fa68dbc0f6940d83c12bd41"},
+    {file = "pydantic_monty-0.0.17-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:2254d25c34463d67069f5f1567157bde9311654cd5371f8933b8ea9815bfa26a"},
+    {file = "pydantic_monty-0.0.17-cp313-cp313-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:f0688a1fa5dc045ac7b7e996d7269b94f74f116d7b1e352c7b5bb5ad53d4fe03"},
+    {file = "pydantic_monty-0.0.17-cp313-cp313-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:7b35121ac555ed201405c69d531e4cb916da6984b8cd2e15c8a319117349faf6"},
+    {file = "pydantic_monty-0.0.17-cp313-cp313-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:7c97dc44af25d4392b474902fc40f78f09fe8f44ba791364670334fe12abc077"},
+    {file = "pydantic_monty-0.0.17-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:3ed2fb365ef9ca921de9a17786ecfa2efe06e65678e6ca57be51658a2a880f31"},
+    {file = "pydantic_monty-0.0.17-cp313-cp313-musllinux_1_1_aarch64.whl", hash = "sha256:5bf9f07b38dd12747e3c95b169a5afb3e2e9107622e01e548246c84d19a69c99"},
+    {file = "pydantic_monty-0.0.17-cp313-cp313-musllinux_1_1_x86_64.whl", hash = "sha256:a5e9bafd4b5acbc0a8e12ee8403a3ce37281c3b0fa5909d3f412bee76c69003c"},
+    {file = "pydantic_monty-0.0.17-cp313-cp313-win32.whl", hash = "sha256:1c239ae3e610d3f39cd1609285209a4e2d046b465ac1bfed0d4374c615eed0fa"},
+    {file = "pydantic_monty-0.0.17-cp313-cp313-win_amd64.whl", hash = "sha256:1886c3590b02f359ae991f1e76691064f167330eda4fbf22762127ce17d0eb48"},
+    {file = "pydantic_monty-0.0.17-cp314-cp314-macosx_10_12_x86_64.whl", hash = "sha256:a166bd04d1996f0d144fbb5e1391cd1c0fbdacd4fa3b689dd48931388679fe98"},
+    {file = "pydantic_monty-0.0.17-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:d82f319e3fd79707a7b81bbb68596509d14ac73502d2f0daf4ab5d281efdfbdc"},
+    {file = "pydantic_monty-0.0.17-cp314-cp314-manylinux_2_12_i686.manylinux2010_i686.whl", hash = "sha256:f38b9875f7ff56fe69538b60b2ecbdcbe2b8b7780407ceb05fe0ee1414bf8d19"},
+    {file = "pydantic_monty-0.0.17-cp314-cp314-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:74a778bb5a4dcdbc85b3b9002f9a72a43fb6ffd88635bfdd502e8d3053008337"},
+    {file = "pydantic_monty-0.0.17-cp314-cp314-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:9e2ab074a65738e9c1b4be9a432e7ca1e9987a6706018dc7a5af6d4ce7cecdf3"},
+    {file = "pydantic_monty-0.0.17-cp314-cp314-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:00fd1cd28b4200c9ccd02629868486b366af1bfe1f0584d4c9e513b7a941a868"},
+    {file = "pydantic_monty-0.0.17-cp314-cp314-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:26ea6684555bfd00cbe9d2df3e73caada3d82200c168c63cc475197b55b88401"},
+    {file = "pydantic_monty-0.0.17-cp314-cp314-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f804a03a3bbd0cf0ade1d4ce11b50ca6858e9c4440b27c746faf1d3c0a272954"},
+    {file = "pydantic_monty-0.0.17-cp314-cp314-musllinux_1_1_aarch64.whl", hash = "sha256:b5476e6c08b86b0bea554b97ce9b142aac1177447f2d3c5751864b27991fd1b1"},
+    {file = "pydantic_monty-0.0.17-cp314-cp314-musllinux_1_1_x86_64.whl", hash = "sha256:b5fcdcca45439844bee268686f37226dbf5803ec7a5945f5536c41419f151dac"},
+    {file = "pydantic_monty-0.0.17-cp314-cp314-win32.whl", hash = "sha256:4dd3e6e80a415e7272f7a7583a4f8e045096653f6074e181117eb61fc8fe3b45"},
+    {file = "pydantic_monty-0.0.17-cp314-cp314-win_amd64.whl", hash = "sha256:36a8090a628e8cf91df8f66c721a71050ac8f48473d4992b9afbd9585941a647"},
+    {file = "pydantic_monty-0.0.17.tar.gz", hash = "sha256:9c4904a8fbc63282793f3afd2d180124494c7fc371783f365e5691c9586360af"},
+]
+
+[package.dependencies]
+typing-extensions = ">=4.5"
 
 [[package]]
 name = "pydantic-settings"
@@ -2221,4 +2296,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<4.0"
-content-hash = "1e40a119a7377a0ba878c9d20d844a919c00f76585ff8ea113e3ebbcd485a543"
+content-hash = "b7f03bab577caffa34a2034f2af3b9a3c082a5c9dad32db22ed3b8f08081ae60"
