@@ -86,9 +86,10 @@ class CuratedNocfoClient:
         path: str,
         *,
         files: dict[str, Any],
+        data: dict[str, Any] | None = None,
         business_slug: str | None = None,
     ) -> Any:
-        response = await self._client.post(path, files=files)
+        response = await self._client.post(path, files=files, data=data)
         if response.status_code >= 400:
             await self._raise_response_error(response, business_slug=business_slug)
         if response.status_code == 204 or not response.content:

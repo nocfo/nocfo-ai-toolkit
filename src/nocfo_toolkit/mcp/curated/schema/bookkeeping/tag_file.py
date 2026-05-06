@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 
 from nocfo_toolkit.mcp.curated.schema.common import (
     AgentModel,
@@ -17,7 +17,10 @@ class TagListInput(BusinessPaginationInput):
 
 
 class FileUploadInput(BusinessContextInput):
-    filename: str = Field(description="File name to show for the uploaded attachment.")
+    filename: str = Field(
+        validation_alias=AliasChoices("filename", "name"),
+        description="File name to show for the uploaded attachment.",
+    )
     file_base64: str = Field(description="File contents encoded as base64.")
     content_type: str = Field(
         default="application/octet-stream",

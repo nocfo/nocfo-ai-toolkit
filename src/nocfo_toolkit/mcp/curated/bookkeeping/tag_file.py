@@ -272,6 +272,7 @@ async def bookkeeping_file_upload(params: FileUploadInput) -> dict[str, Any]:
     result = await get_client().request_multipart(
         path,
         files={"file": (args.filename, content, args.content_type)},
+        data={"name": args.filename, "type": args.content_type},
         business_slug=slug,
     )
     return dump_model_from_backend(FileSummary, result)

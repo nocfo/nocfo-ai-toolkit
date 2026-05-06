@@ -13,6 +13,7 @@ from nocfo_toolkit.mcp.curated.schema.common import (
     DocumentAction,
     DocumentSide,
     RelationRole,
+    StrictModel,
     RelationType,
     enum_or_str,
     tool_handle,
@@ -200,9 +201,24 @@ class DocumentRelationIdInput(DocumentNumberInput):
     )
 
 
+class DocumentRelationUpdatePayload(StrictModel):
+    related_document_number: str | None = Field(
+        default=None,
+        description="Document number of the other bookkeeping document in the relation.",
+    )
+    role: enum_or_str(RelationRole) | None = Field(
+        default=None,
+        description="Whether the current document is the accrual or settlement side of the relation.",
+    )
+    type: enum_or_str(RelationType) | None = Field(
+        default=None,
+        description="Type/category shown for this record.",
+    )
+
+
 class DocumentRelationUpdateInput(DocumentRelationIdInput):
-    payload: dict[str, Any] = Field(
-        description="Fields to create or update. Prefer user-facing values such as account_number, document_number, invoice_number, tag_names, or contact names when supported."
+    payload: DocumentRelationUpdatePayload = Field(
+        description="Relation update payload. Supported fields: related_document_number, role, and type."
     )
 
 
