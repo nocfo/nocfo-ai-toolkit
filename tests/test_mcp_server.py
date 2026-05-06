@@ -133,6 +133,20 @@ def test_create_server_accepts_jwt_without_pat(monkeypatch) -> None:
     assert server is not None
 
 
+def test_create_server_attaches_skip_confirmation_setting() -> None:
+    config = ToolkitConfig(
+        api_token=None,
+        token_source=TokenSource.MISSING,
+        base_url="https://api-prd.nocfo.io",
+        output_format=OutputFormat.TABLE,
+        jwt_token="jwt-only-token",
+    )
+
+    server = create_server(config, options=MCPServerOptions(skip_confirmation=True))
+
+    assert getattr(server, "_nocfo_skip_mutation_confirmation", None) is True
+
+
 def test_create_server_uses_curated_server_instructions() -> None:
     config = ToolkitConfig(
         api_token=None,

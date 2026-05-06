@@ -121,6 +121,14 @@ def run_mcp_server(
             "context by exposing search_tools + call_tool."
         ),
     ),
+    skip_confirmation: bool = typer.Option(
+        False,
+        "--skip-confirmation/--require-confirmation",
+        help=(
+            "Skip interactive mutation confirmation elicitation. "
+            "Use only in trusted automation environments."
+        ),
+    ),
 ) -> None:
     """Run NoCFO MCP server over stdio or HTTP transport.
 
@@ -165,6 +173,12 @@ def run_mcp_server(
         if env_tool_search
         else tool_search
     )
+    env_skip_confirmation = os.getenv("NOCFO_MCP_SKIP_CONFIRMATION", "").strip().lower()
+    skip_confirmation_enabled = (
+        env_skip_confirmation in {"1", "true", "yes", "on"}
+        if env_skip_confirmation
+        else skip_confirmation
+    )
 
     options = MCPServerOptions(
         auth_mode=auth_mode_value,
@@ -172,6 +186,7 @@ def run_mcp_server(
         required_scopes=scope_items,
         stateless_http=stateless_http,
         tool_search=tool_search_enabled,
+        skip_confirmation=skip_confirmation_enabled,
     )
 
     if transport_normalized == "http":

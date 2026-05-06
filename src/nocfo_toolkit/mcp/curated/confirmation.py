@@ -14,6 +14,7 @@ from fastmcp.server.elicitation import (
 from pydantic import BaseModel
 
 from nocfo_toolkit.mcp.curated.errors import raise_tool_error
+from nocfo_toolkit.mcp.curated.runtime import should_skip_mutation_confirmation
 
 _APPROVE_CHOICES = {
     "approve",
@@ -52,6 +53,9 @@ async def confirm_mutation(
     parameters: dict[str, Any] | None = None,
 ) -> None:
     """Request user approval for mutating operations when elicitation is available."""
+    if should_skip_mutation_confirmation():
+        return
+
     resolved_business = business.strip()
     if not resolved_business:
         raise_tool_error(
