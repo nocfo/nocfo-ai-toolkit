@@ -6,6 +6,11 @@ on:
       devBuildTag:
         description: "Custom tag for test release"
         required: false
+      publishPypi:
+        description: "Publish package to PyPI"
+        type: boolean
+        required: false
+        default: false
 
 jobs:
   pre-commit:
@@ -121,6 +126,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.CI_USER_PAT }}
           POETRY_PYPI_TOKEN_PYPI: ${{ secrets.PYPI_API_TOKEN }}
+          PUBLISH_PYPI: ${{ github.event.inputs.publishPypi }}
           AWS_REGION: eu-west-1
           AWS_ACCOUNT_ID: "141239391012"
 

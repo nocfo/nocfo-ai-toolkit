@@ -18,7 +18,6 @@ except ModuleNotFoundError:  # pragma: no cover - fallback for minimal environme
 
 
 DEFAULT_BASE_URL = "https://api-prd.nocfo.io"
-DEFAULT_OPENAPI_PATH = "/openapi/"
 AUTH_HEADER_SCHEME = "Token"
 MIN_PAT_LENGTH = 8
 
@@ -48,6 +47,7 @@ class ToolkitConfig:
     base_url: str = DEFAULT_BASE_URL
     output_format: OutputFormat = OutputFormat.TABLE
     jwt_token: str | None = None
+    nocfo_client: str | None = None
 
     @property
     def is_authenticated(self) -> bool:
@@ -130,6 +130,11 @@ def sanitize_jwt_token(value: str | None) -> str | None:
     return token
 
 
+def sanitize_nocfo_client(value: str | None) -> str | None:
+    """Pass through optional x-nocfo-client value as-is."""
+    return value
+
+
 def _resolve_token(
     *,
     cli_token: str | None,
@@ -166,6 +171,7 @@ def load_config(
     )
     resolved_token = sanitize_api_token(raw_token)
     resolved_jwt_token = sanitize_jwt_token(os.getenv("NOCFO_JWT_TOKEN"))
+    resolved_nocfo_client = sanitize_nocfo_client(os.getenv("NOCFO_CLIENT"))
     resolved_base_url = (
         base_url
         or os.getenv("NOCFO_BASE_URL")
@@ -182,4 +188,5 @@ def load_config(
         base_url=resolved_base_url,
         output_format=resolved_output,
         jwt_token=resolved_jwt_token,
+        nocfo_client=resolved_nocfo_client,
     )

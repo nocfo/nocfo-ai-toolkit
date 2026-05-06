@@ -9,30 +9,17 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
-from nocfo_toolkit.mcp.auth import JwtExchangeAuth, MCPAuthConfigurationError
+from nocfo_toolkit.mcp.auth import (
+    JwtExchangeAuth,
+    MCPAuthConfigurationError,
+    PassthroughAuth,
+)
 from nocfo_toolkit.mcp.server import (
     MCPServerOptions,
     _create_pat_client,
     create_server,
 )
 from nocfo_toolkit.config import OutputFormat, TokenSource, ToolkitConfig
-
-
-def _minimal_openapi_spec(base_url: str) -> dict[str, object]:
-    return {
-        "openapi": "3.0.0",
-        "info": {"title": "NoCFO", "version": "1.0.0"},
-        "servers": [{"url": base_url}],
-        "paths": {
-            "/v1/example/": {
-                "get": {
-                    "operationId": "example",
-                    "tags": ["MCP"],
-                    "responses": {"200": {"description": "OK"}},
-                }
-            }
-        },
-    }
 
 
 def _build_unverified_jwt_with_exp(exp: int) -> str:
@@ -166,6 +153,87 @@ def test_jwt_exchange_auth_surfaces_exchange_error_detail(monkeypatch) -> None:
         asyncio.run(run())
 
 
+def test_passthrough_auth_forwards_incoming_authorization_header(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "nocfo_toolkit.mcp.auth.get_http_headers",
+        lambda include=None: {"authorization": "Bearer incoming-jwt"},
+    )
+    auth = PassthroughAuth()
+
+    async def run() -> None:
+        transport = httpx.MockTransport(
+            lambda request: httpx.Response(
+                200,
+                json={"auth": request.headers.get("Authorization")},
+            )
+        )
+        async with httpx.AsyncClient(
+            base_url="https://api.example.com",
+            transport=transport,
+            auth=auth,
+        ) as client:
+            response = await client.get("/v1/businesses/")
+            assert response.status_code == 200
+            assert response.json()["auth"] == "Bearer incoming-jwt"
+
+    asyncio.run(run())
+
+
+def test_passthrough_auth_forwards_incoming_x_nocfo_client_header(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "nocfo_toolkit.mcp.auth.get_http_headers",
+        lambda include=None: {
+            "authorization": "Bearer incoming-jwt",
+            "x-nocfo-client": "my-agent/2.0",
+        },
+    )
+    auth = PassthroughAuth()
+
+    async def run() -> None:
+        transport = httpx.MockTransport(
+            lambda request: httpx.Response(
+                200,
+                json={
+                    "auth": request.headers.get("Authorization"),
+                    "x_nocfo_client": request.headers.get("x-nocfo-client"),
+                },
+            )
+        )
+        async with httpx.AsyncClient(
+            base_url="https://api.example.com",
+            transport=transport,
+            auth=auth,
+        ) as client:
+            response = await client.get("/v1/businesses/")
+            assert response.status_code == 200
+            assert response.json()["auth"] == "Bearer incoming-jwt"
+            assert response.json()["x_nocfo_client"] == "my-agent/2.0"
+
+    asyncio.run(run())
+
+
+def test_passthrough_auth_requires_authorization_header(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "nocfo_toolkit.mcp.auth.get_http_headers",
+        lambda include=None: {},
+    )
+    auth = PassthroughAuth()
+
+    async def run() -> None:
+        transport = httpx.MockTransport(lambda request: httpx.Response(200, json={}))
+        async with httpx.AsyncClient(
+            base_url="https://api.example.com",
+            transport=transport,
+            auth=auth,
+        ) as client:
+            await client.get("/v1/businesses/")
+
+    with pytest.raises(RuntimeError, match="Missing Authorization header"):
+        asyncio.run(run())
+
+
 def test_create_server_oauth_mode_requires_public_base_url(monkeypatch) -> None:
     config = ToolkitConfig(
         api_token=None,
@@ -173,47 +241,19 @@ def test_create_server_oauth_mode_requires_public_base_url(monkeypatch) -> None:
         base_url="https://api-prd.nocfo.io",
         output_format=OutputFormat.TABLE,
     )
-    monkeypatch.setattr(
-        "nocfo_toolkit.mcp.server.load_openapi_spec",
-        _minimal_openapi_spec,
-    )
 
     with pytest.raises(MCPAuthConfigurationError, match="Missing MCP public base URL"):
         create_server(config, options=MCPServerOptions(auth_mode="oauth"))
 
 
-def _minimal_openapi_spec_with_get_and_post(base_url: str) -> dict[str, object]:
-    return {
-        "openapi": "3.0.0",
-        "info": {"title": "NoCFO", "version": "1.0.0"},
-        "servers": [{"url": base_url}],
-        "paths": {
-            "/v1/example/": {
-                "get": {
-                    "operationId": "example_read",
-                    "tags": ["MCP"],
-                    "responses": {"200": {"description": "OK"}},
-                },
-                "post": {
-                    "operationId": "example_create",
-                    "tags": ["MCP"],
-                    "responses": {"200": {"description": "OK"}},
-                },
-            }
-        },
-    }
-
-
-def test_create_server_oauth_mode_adds_tool_auth_metadata(monkeypatch) -> None:
+def test_create_server_oauth_mode_uses_curated_tools_without_permission_metadata(
+    monkeypatch,
+) -> None:
     config = ToolkitConfig(
         api_token=None,
         token_source=TokenSource.MISSING,
         base_url="https://api-prd.nocfo.io",
         output_format=OutputFormat.TABLE,
-    )
-    monkeypatch.setattr(
-        "nocfo_toolkit.mcp.server.load_openapi_spec",
-        _minimal_openapi_spec_with_get_and_post,
     )
     monkeypatch.setenv("NOCFO_MCP_JWKS_URI", "https://login.nocfo.io/jwks.json")
 
@@ -227,13 +267,14 @@ def test_create_server_oauth_mode_adds_tool_auth_metadata(monkeypatch) -> None:
     )
     tools = asyncio.run(server.list_tools())
     resources = asyncio.run(server.list_resources())
-    assert len(tools) == 2
+    names = {tool.name for tool in tools}
+    assert "common_current_business_retrieve" in names
+    assert "bookkeeping_document_create" in names
     assert len(resources) == 0
-    for component in tools:
+    for component in tools[:5]:
         meta = component.meta or {}
-        assert meta["mcp/www_authenticate"] == "Bearer"
-        assert meta["securitySchemes"][0]["type"] == "oauth2"
-        assert meta["securitySchemes"][0]["scopes"] == ["read"]
+        assert "mcp/www_authenticate" not in meta
+        assert "securitySchemes" not in meta
 
 
 def test_create_pat_client_prefers_jwt_token() -> None:

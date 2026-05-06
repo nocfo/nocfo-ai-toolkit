@@ -3,160 +3,35 @@
 from __future__ import annotations
 
 import asyncio
-import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 import httpx
-from pydantic import AnyUrl
-from fastmcp.server.providers.openapi.components import (
-    OpenAPIResource,
-    OpenAPIResourceTemplate,
-)
-from fastmcp.server.providers.openapi.routing import MCPType, RouteMap
-from fastmcp.tools.tool import Tool
+from fastmcp.server.dependencies import get_http_headers
+from fastmcp.server.providers import FileSystemProvider
 
 from nocfo_toolkit.config import AUTH_HEADER_SCHEME, ToolkitConfig
 from nocfo_toolkit.mcp.auth import (
     MCPAuthOptions,
     JwtExchangeAuth,
-    apply_tool_auth_metadata,
+    PassthroughAuth,
     build_remote_auth_provider,
 )
+from nocfo_toolkit.mcp.curated import SERVER_INSTRUCTIONS
+from nocfo_toolkit.mcp.curated.client import CuratedNocfoClient
+from nocfo_toolkit.mcp.curated.runtime import attach_curated_client
 from nocfo_toolkit.mcp.http_error_capture import capture_http_error_response
 from nocfo_toolkit.mcp.middleware import MCPToolErrorMiddleware
-from nocfo_toolkit.openapi import (
-    MCP_RESOURCE_TAG,
-    MCP_TOOL_TAG,
-    filter_mcp_spec,
-    load_openapi_spec,
-)
-
-from fastmcp.utilities.openapi import extract_output_schema_from_responses
+from nocfo_toolkit.mcp.search import NocfoBM25SearchTransform
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
 
-# Semantic mapping for MCP-tagged routes (see FastMCP OpenAPI route maps):
-# https://gofastmcp.com/integrations/openapi#custom-route-maps
-MCP_OPENAPI_ROUTE_MAPS: list[RouteMap] = [
-    RouteMap(tags={MCP_RESOURCE_TAG}, mcp_type=MCPType.RESOURCE),
-    RouteMap(tags={MCP_TOOL_TAG}, mcp_type=MCPType.TOOL),
-    RouteMap(mcp_type=MCPType.EXCLUDE),
-]
-
-# Must match ``nocfo.spectacular_hooks.MCP_NAMESPACE_EXTENSION`` (set by ``mcp_extend_schema``).
-X_MCP_NAMESPACE = "x-mcp-namespace"
-_X_MCP_PREFIX = "x-mcp-"
-X_NOCFO_MCP_SERVER_INSTRUCTIONS = "x-nocfo-mcp-server-instructions"
 MCP_RUNTIME_CONTRACT_HEADER = "X-Nocfo-MCP-Contract"
 MCP_RUNTIME_CONTRACT_VALUE = "1"
-
-
-def _normalize_mcp_namespace_token(value: str) -> str:
-    """Normalize backend ``MCPNamespace`` string (allows accidental human-readable input)."""
-    normalized = value.strip()
-    if not normalized:
-        return ""
-    normalized = normalized.replace("-", "_").replace(" ", "_")
-    normalized = re.sub(r"(?<!^)(?=[A-Z])", "_", normalized)
-    normalized = re.sub(r"[^a-zA-Z0-9_]", "", normalized)
-    normalized = re.sub(r"_+", "_", normalized)
-    return normalized.strip("_").lower()
-
-
-def build_mcp_component_name(
-    operation_id: str, extensions: dict[str, Any] | None
-) -> str:
-    """Build MCP component name from ``operation_id``.
-
-    Namespace extension values are preserved in metadata but are not used for
-    display-name generation to keep backend ``operationId`` as the single source
-    of truth.
-    """
-    del extensions
-    if not operation_id or not str(operation_id).strip():
-        return operation_id
-    return operation_id.replace(".", "_")
-
-
-def _resource_uri_with_name(uri: str | AnyUrl, display_name: str) -> AnyUrl:
-    """Keep ``resource://`` prefix and optional ``/{param}`` suffix; replace the name segment."""
-    uri_str = str(uri)
-    return AnyUrl(re.sub(r"^(resource://)([^/]+)", rf"\1{display_name}", uri_str))
-
-
-def apply_mcp_namespace_names(route: Any, component: Any) -> None:
-    """Apply ``x-mcp-namespace``-based MCP names to a tool, resource, or template.
-
-    Used by :func:`create_server` and by tests that construct an
-    :class:`OpenAPIProvider` with the same ``NoCFO`` naming policy.
-    """
-    if not getattr(route, "operation_id", None):
-        return
-    ext = getattr(route, "extensions", None) or {}
-    display_name = build_mcp_component_name(route.operation_id, ext)
-    if isinstance(component, Tool):
-        component.name = display_name
-        component.title = display_name
-    elif isinstance(component, OpenAPIResource):
-        component.name = display_name
-        component.uri = _resource_uri_with_name(component.uri, display_name)
-    elif isinstance(component, OpenAPIResourceTemplate):
-        component.name = display_name
-        component.uri_template = str(
-            _resource_uri_with_name(component.uri_template, display_name)
-        )
-
-
-def apply_mcp_operation_metadata(route: Any, component: Any) -> None:
-    """Attach OpenAPI ``x-mcp-*`` operation extensions to component metadata."""
-    extensions = getattr(route, "extensions", None) or {}
-    mcp_extensions = {
-        key: value
-        for key, value in extensions.items()
-        if isinstance(key, str) and key.startswith(_X_MCP_PREFIX)
-    }
-    if not mcp_extensions:
-        return
-
-    meta: dict[str, Any] = dict(getattr(component, "meta", None) or {})
-    nocfo_meta: dict[str, Any] = dict(meta.get("nocfo") or {})
-    nocfo_meta["mcp"] = mcp_extensions
-    meta["nocfo"] = nocfo_meta
-    component.meta = meta
-
-
-def restore_openapi_output_schema(route: Any, component: Any) -> None:
-    """Restore the real OpenAPI output schema on tools for agent-facing metadata.
-
-    When ``validate_output=False`` FastMCP replaces the output schema with a
-    permissive fallback so that runtime responses are never rejected.  This
-    function re-derives the accurate schema from the route and writes it back
-    onto the tool so that ``tools/list`` still exposes precise type information
-    to the agent — without enforcing it at call time.
-    """
-    if not isinstance(component, Tool):
-        return
-    responses = getattr(route, "responses", None)
-    if responses is None:
-        return
-    real_schema = extract_output_schema_from_responses(
-        responses,
-        getattr(route, "response_schemas", None),
-        getattr(route, "openapi_version", None),
-    )
-    if real_schema is not None:
-        component.output_schema = real_schema
-
-
-def _get_server_instructions(openapi_spec: dict[str, Any]) -> str | None:
-    """Read backend-owned MCP server instructions from OpenAPI root extensions."""
-    instructions = openapi_spec.get(X_NOCFO_MCP_SERVER_INSTRUCTIONS)
-    if not isinstance(instructions, str):
-        return None
-    cleaned = instructions.strip()
-    return cleaned or None
+MCP_CLIENT_HEADER = "x-nocfo-client"
+MCP_DEFAULT_CLIENT = "nocfo-mcp"
 
 
 def _request_requires_mcp_runtime_contract_header(request: httpx.Request) -> bool:
@@ -173,9 +48,25 @@ async def _inject_mcp_runtime_contract_header(request: httpx.Request) -> None:
     )
 
 
-def _client_event_hooks() -> dict[str, list[Any]]:
+async def _inject_mcp_client_header(
+    request: httpx.Request, *, default_client: str
+) -> None:
+    incoming_headers = get_http_headers(include={MCP_CLIENT_HEADER})
+    incoming_client = (incoming_headers.get(MCP_CLIENT_HEADER) or "").strip()
+    if incoming_client:
+        request.headers[MCP_CLIENT_HEADER] = incoming_client
+        return
+    request.headers[MCP_CLIENT_HEADER] = default_client
+
+
+def _client_event_hooks(default_client: str) -> dict[str, list[Any]]:
     return {
-        "request": [_inject_mcp_runtime_contract_header],
+        "request": [
+            _inject_mcp_runtime_contract_header,
+            lambda request: _inject_mcp_client_header(
+                request, default_client=default_client
+            ),
+        ],
         "response": [capture_http_error_response],
     }
 
@@ -186,12 +77,13 @@ class MCPServerOptions:
 
     name: str = "NoCFO"
     timeout_seconds: float = 30.0
-    auth_mode: Literal["pat", "oauth"] = "pat"
+    auth_mode: Literal["pat", "oauth", "passthrough"] = "pat"
     mcp_base_url: str | None = None
     jwt_exchange_path: str = "/auth/jwt/"
     token_refresh_skew_seconds: int = 60
     required_scopes: tuple[str, ...] = ()
     stateless_http: bool = False
+    tool_search: bool = False
 
 
 def _create_pat_client(
@@ -203,11 +95,12 @@ def _create_pat_client(
             "Missing authentication token. Set NOCFO_JWT_TOKEN or NOCFO_API_TOKEN, "
             "or run `nocfo auth configure` before starting MCP server in PAT mode."
         )
+    default_client = config.nocfo_client or MCP_DEFAULT_CLIENT
     return httpx.AsyncClient(
         base_url=config.base_url,
         headers={"Authorization": f"{AUTH_HEADER_SCHEME} {resolved_token}"},
         timeout=timeout_seconds,
-        event_hooks=_client_event_hooks(),
+        event_hooks=_client_event_hooks(default_client),
     )
 
 
@@ -218,6 +111,7 @@ def _create_oauth_client(
     timeout_seconds: float,
     refresh_skew_seconds: int,
 ) -> httpx.AsyncClient:
+    default_client = config.nocfo_client or MCP_DEFAULT_CLIENT
     return httpx.AsyncClient(
         base_url=config.base_url,
         auth=JwtExchangeAuth(
@@ -225,7 +119,19 @@ def _create_oauth_client(
             refresh_skew_seconds=refresh_skew_seconds,
         ),
         timeout=timeout_seconds,
-        event_hooks=_client_event_hooks(),
+        event_hooks=_client_event_hooks(default_client),
+    )
+
+
+def _create_passthrough_client(
+    config: ToolkitConfig, timeout_seconds: float
+) -> httpx.AsyncClient:
+    default_client = config.nocfo_client or MCP_DEFAULT_CLIENT
+    return httpx.AsyncClient(
+        base_url=config.base_url,
+        auth=PassthroughAuth(),
+        timeout=timeout_seconds,
+        event_hooks=_client_event_hooks(default_client),
     )
 
 
@@ -234,7 +140,7 @@ def create_server(
     *,
     options: MCPServerOptions | None = None,
 ) -> FastMCP:
-    """Create an MCP server from NoCFO OpenAPI specification."""
+    """Create a curated workflow-oriented NoCFO MCP server."""
 
     from fastmcp import FastMCP
 
@@ -257,37 +163,30 @@ def create_server(
                 required_scopes=opts.required_scopes,
             ),
         )
+    elif opts.auth_mode == "passthrough":
+        client = _create_passthrough_client(config, opts.timeout_seconds)
+        server_auth = None
     else:
         client = _create_pat_client(config, opts.timeout_seconds)
         server_auth = None
 
-    spec = load_openapi_spec(base_url=config.base_url)
-    filtered_spec = filter_mcp_spec(spec, mcp_tag="MCP")
-    server_instructions = _get_server_instructions(spec)
+    transforms: list[Any] = []
+    if opts.tool_search:
+        transforms.append(NocfoBM25SearchTransform(max_results=12))
 
-    def component_mapper(route: Any, component: Any) -> None:
-        apply_mcp_namespace_names(route, component)
-        apply_mcp_operation_metadata(route, component)
-        restore_openapi_output_schema(route, component)
-        if opts.auth_mode == "oauth" and isinstance(
-            component, (Tool, OpenAPIResource, OpenAPIResourceTemplate)
-        ):
-            apply_tool_auth_metadata(
-                component,
-                required_scopes=opts.required_scopes,
-            )
+    curated_client = CuratedNocfoClient(client, config)
+    curated_provider_root = Path(__file__).resolve().parent / "curated"
 
-    return FastMCP.from_openapi(
-        openapi_spec=filtered_spec,
-        client=client,
+    server = FastMCP(
         name=opts.name,
-        instructions=server_instructions,
+        instructions=SERVER_INSTRUCTIONS,
         auth=server_auth,
         middleware=[MCPToolErrorMiddleware()],
-        route_maps=MCP_OPENAPI_ROUTE_MAPS,
-        mcp_component_fn=component_mapper,
-        validate_output=False,
+        providers=[FileSystemProvider(root=curated_provider_root)],
+        transforms=transforms,
     )
+    attach_curated_client(server, curated_client)
+    return server
 
 
 def run_server(
