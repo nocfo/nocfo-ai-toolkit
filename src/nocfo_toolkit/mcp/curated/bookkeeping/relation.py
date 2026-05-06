@@ -8,12 +8,10 @@ from fastmcp.tools import tool
 from nocfo_toolkit.mcp.curated.confirmation import confirm_mutation
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.bookkeeping.document import document_by_number
-from nocfo_toolkit.mcp.curated.errors import raise_tool_error
 from nocfo_toolkit.mcp.curated.schemas import (
     DeletedResponse,
     DocumentRelationCreateInput,
     DocumentRelationIdInput,
-    DocumentRelationUpdateInput,
     EntryListInput,
     ListEnvelope,
     RelationSummary,
@@ -98,36 +96,6 @@ async def bookkeeping_document_relation_create(
 
 
 @tool(
-    name="bookkeeping_document_relation_update",
-    description="Update a relation listed for the same document context.",
-)
-async def bookkeeping_document_relation_update(
-    params: DocumentRelationUpdateInput,
-) -> dict[str, Any]:
-    args = params
-    slug = await business_slug(args.business)
-    document = await document_by_number(slug, args.document_number)
-    payload = await _resolve_relation_update_payload(slug, args.payload.model_dump())
-    path = f"/v1/business/{slug}/document/{document['id']}/relation/{args.relation_id}/"
-    await confirm_mutation(
-        business=slug,
-        tool_name="bookkeeping_document_relation_update",
-        target_resource={
-            "type": "document_relation",
-            "id": args.relation_id,
-        },
-        parameters=payload,
-    )
-    result = await get_client().request(
-        "PATCH",
-        path,
-        json_body=payload,
-        business_slug=slug,
-    )
-    return dump_model_from_backend(RelationSummary, result)
-
-
-@tool(
     name="bookkeeping_document_relation_delete",
     description="Delete a relation listed for the same document context.",
 )
@@ -152,21 +120,3 @@ async def bookkeeping_document_relation_delete(
         business_slug=slug,
     )
     return dump_model(DeletedResponse(relation_id=args.relation_id))
-
-
-async def _resolve_relation_update_payload(
-    slug: str, raw_payload: dict[str, Any]
-) -> dict[str, Any]:
-    payload = {key: value for key, value in raw_payload.items() if value is not None}
-    related_document_number = payload.pop("related_document_number", None)
-    if related_document_number is not None:
-        related = await document_by_number(slug, str(related_document_number))
-        payload["related_document"] = related["id"]
-    if not payload:
-        raise_tool_error(
-            "invalid_request",
-            "At least one mutable relation field is required.",
-            "Provide one or more of related_document_number, role, or type.",
-            status_code=400,
-        )
-    return payload

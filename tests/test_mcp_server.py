@@ -182,10 +182,12 @@ def test_create_server_registers_curated_tool_surface() -> None:
     assert "bookkeeping_document_create" in names
     assert "bookkeeping_documents_search" not in names
     assert "bookkeeping_entries_list" in names
+    assert "bookkeeping_document_relation_update" not in names
     assert "invoicing_contacts_search" not in names
     assert "invoicing_sales_invoices_search" not in names
     assert "invoicing_purchase_invoices_search" not in names
     assert "invoicing_sales_invoice_action" in names
+    assert "common_user_update" not in names
     assert "reporting_report_retrieve" not in names
     assert "reporting_balance_sheet_retrieve" in names
     assert "reporting_equity_changes_retrieve" in names

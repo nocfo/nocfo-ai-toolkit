@@ -13,7 +13,6 @@ from nocfo_toolkit.mcp.curated.schema.common import (
     DocumentAction,
     DocumentSide,
     RelationRole,
-    StrictModel,
     RelationType,
     enum_or_str,
     tool_handle,
@@ -197,28 +196,7 @@ class DocumentRelationCreateInput(DocumentNumberInput):
 
 class DocumentRelationIdInput(DocumentNumberInput):
     relation_id: int = Field(
-        description="Relation ID from bookkeeping_document_relations_list. Use bookkeeping_document_relation_update or bookkeeping_document_relation_delete for this ID."
-    )
-
-
-class DocumentRelationUpdatePayload(StrictModel):
-    related_document_number: str | None = Field(
-        default=None,
-        description="Document number of the other bookkeeping document in the relation.",
-    )
-    role: enum_or_str(RelationRole) | None = Field(
-        default=None,
-        description="Whether the current document is the accrual or settlement side of the relation.",
-    )
-    type: enum_or_str(RelationType) | None = Field(
-        default=None,
-        description="Type/category shown for this record.",
-    )
-
-
-class DocumentRelationUpdateInput(DocumentRelationIdInput):
-    payload: DocumentRelationUpdatePayload = Field(
-        description="Relation update payload. Supported fields: related_document_number, role, and type."
+        description="Relation ID from bookkeeping_document_relations_list. Use bookkeeping_document_relation_delete for this ID."
     )
 
 
@@ -434,12 +412,12 @@ class EntrySummary(AgentModel):
 class RelationSummary(AgentModel):
     tool_handle: str | None = Field(
         default=None,
-        description="Copy this value from bookkeeping_document_relations_list.items[].tool_handle and pass it unchanged to bookkeeping_document_relation_update or bookkeeping_document_relation_delete.",
+        description="Copy this value from bookkeeping_document_relations_list.items[].tool_handle and pass it unchanged to bookkeeping_document_relation_delete.",
     )
     relation_id: int | None = Field(
         default=None,
         validation_alias=AliasChoices("relation_id", "id"),
-        description="Relation ID. Use bookkeeping_document_relation_update or bookkeeping_document_relation_delete for this ID.",
+        description="Relation ID. Use bookkeeping_document_relation_delete for this ID.",
     )
     related_document_handle: str | None = Field(
         default=None,

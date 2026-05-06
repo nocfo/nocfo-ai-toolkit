@@ -19,15 +19,23 @@ from nocfo_toolkit.mcp.curated.schema.common import (
 
 
 def _derive_invoice_next_action(
-    *, status_raw: str | None, is_sendable: bool | None, last_delivery_at: str | None
+    *,
+    status_raw: str | None,
+    is_sendable: bool | None,
+    last_delivery_at: str | None,
+    invoice_number: int | str | None = None,
 ) -> tuple[str | None, str | None]:
     status = str(status_raw).strip().upper() if status_raw is not None else ""
     can_send = bool(is_sendable)
 
     if status == "DRAFT":
+        if invoice_number is None:
+            identifier_hint = "Use `tool_handle` from this response because `invoice_number` is assigned only after acceptance."
+        else:
+            identifier_hint = "You can use either `invoice_number` or `tool_handle`."
         return (
             "accept",
-            "Invoice is in DRAFT status. Next step: call invoicing_sales_invoice_action with action=accept.",
+            f"Invoice is in DRAFT status. Next step: call invoicing_sales_invoice_action with action=accept. {identifier_hint}",
         )
 
     if can_send and not last_delivery_at:
@@ -286,6 +294,7 @@ class SalesInvoiceSummary(AgentModel):
                 status_raw=self.status,
                 is_sendable=self.is_sendable,
                 last_delivery_at=self.last_delivery_at,
+                invoice_number=self.invoice_number,
             )
             if self.next_action is None:
                 self.next_action = next_action
@@ -356,6 +365,7 @@ class SalesInvoiceListItem(AgentModel):
             status_raw=data.get("status"),
             is_sendable=data.get("is_sendable"),
             last_delivery_at=data.get("last_delivery_at"),
+            invoice_number=data.get("invoice_number"),
         )
         if "next_action" not in data:
             data["next_action"] = next_action

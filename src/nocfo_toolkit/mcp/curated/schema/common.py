@@ -385,12 +385,6 @@ class ExactResourceInput(BusinessContextInput):
         return self
 
 
-class PayloadOnlyInput(StrictModel):
-    payload: dict[str, Any] = Field(
-        description="Fields to update on the current user profile."
-    )
-
-
 class IdentifierInput(BusinessContextInput):
     identifier: str = Field(
         description="Identifier for this resource. Prefer the exact value named in the tool description."
