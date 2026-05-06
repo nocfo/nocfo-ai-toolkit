@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastmcp.tools import tool
-from nocfo_toolkit.mcp.tool_access import ToolTag
+from fastmcp.tools.tool import ToolAnnotations
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.schemas import (
     BalanceSheetReportInput,
@@ -30,7 +30,12 @@ from nocfo_toolkit.mcp.curated.utils import report_body
 
 @tool(
     name="reporting_accounting_periods_list",
-    tags={ToolTag.READ_ONLY.value},
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
     description="List accounting periods for the selected business.",
     output_schema=ListEnvelope[PeriodListItem].model_json_schema(),
 )
@@ -51,7 +56,12 @@ async def reporting_accounting_periods_list(
 
 @tool(
     name="reporting_accounting_period_retrieve",
-    tags={ToolTag.READ_ONLY.value},
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
     description=(
         "Retrieve one accounting period by period ID from the accounting periods list."
     ),
@@ -74,6 +84,12 @@ async def reporting_accounting_period_retrieve(
 
 @tool(
     name="reporting_accounting_period_update",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
     description=(
         "Update one accounting period by period ID from the accounting periods list. "
         "This can fail when posted data protects the period."
@@ -99,6 +115,12 @@ async def reporting_accounting_period_update(
 
 @tool(
     name="reporting_accounting_period_delete",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
     description="Delete one accounting period by period ID from the accounting periods list.",
 )
 async def reporting_accounting_period_delete(
@@ -120,7 +142,12 @@ async def reporting_accounting_period_delete(
 
 @tool(
     name="reporting_vat_periods_list",
-    tags={ToolTag.READ_ONLY.value},
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
     description="List VAT periods for the selected business.",
     output_schema=ListEnvelope[PeriodListItem].model_json_schema(),
 )
@@ -141,7 +168,12 @@ async def reporting_vat_periods_list(
 
 @tool(
     name="reporting_vat_period_retrieve",
-    tags={ToolTag.READ_ONLY.value},
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
     description="Retrieve one VAT period by VAT period ID from the VAT periods list.",
 )
 async def reporting_vat_period_retrieve(params: IdentifierInput) -> dict[str, Any]:
@@ -160,6 +192,12 @@ async def reporting_vat_period_retrieve(params: IdentifierInput) -> dict[str, An
 
 @tool(
     name="reporting_vat_period_update",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
     description=(
         "Update one VAT period by VAT period ID from the VAT periods list. "
         "The period must be editable and not reported."
@@ -185,6 +223,12 @@ async def reporting_vat_period_update(
 
 @tool(
     name="reporting_vat_period_delete",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
     description=(
         "Delete one VAT period by VAT period ID from the VAT periods list. "
         "This can fail when linked records prevent deletion."
@@ -240,7 +284,12 @@ async def run_report(report_type: str, report: Any) -> dict[str, Any]:
 
 @tool(
     name="reporting_balance_sheet_retrieve",
-    tags={ToolTag.READ_ONLY.value},
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
     description="Generate balance sheet report data.",
 )
 async def reporting_balance_sheet_retrieve(
@@ -251,7 +300,12 @@ async def reporting_balance_sheet_retrieve(
 
 @tool(
     name="reporting_equity_changes_retrieve",
-    tags={ToolTag.READ_ONLY.value},
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
     description="Generate equity changes report data.",
 )
 async def reporting_equity_changes_retrieve(
@@ -262,7 +316,12 @@ async def reporting_equity_changes_retrieve(
 
 @tool(
     name="reporting_income_statement_retrieve",
-    tags={ToolTag.READ_ONLY.value},
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
     description="Generate income statement report data.",
 )
 async def reporting_income_statement_retrieve(
@@ -273,7 +332,12 @@ async def reporting_income_statement_retrieve(
 
 @tool(
     name="reporting_journal_retrieve",
-    tags={ToolTag.READ_ONLY.value},
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
     description="Generate journal report data.",
 )
 async def reporting_journal_retrieve(params: JournalReportInput) -> dict[str, Any]:
@@ -282,7 +346,12 @@ async def reporting_journal_retrieve(params: JournalReportInput) -> dict[str, An
 
 @tool(
     name="reporting_ledger_retrieve",
-    tags={ToolTag.READ_ONLY.value},
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
     description="Generate ledger report data.",
 )
 async def reporting_ledger_retrieve(params: LedgerReportInput) -> dict[str, Any]:
@@ -291,7 +360,12 @@ async def reporting_ledger_retrieve(params: LedgerReportInput) -> dict[str, Any]
 
 @tool(
     name="reporting_vat_retrieve",
-    tags={ToolTag.READ_ONLY.value},
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
     description="Generate VAT statement data.",
 )
 async def reporting_vat_retrieve(params: VatReportInput) -> dict[str, Any]:

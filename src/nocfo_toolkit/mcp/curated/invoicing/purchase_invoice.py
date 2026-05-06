@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastmcp.tools import tool
-from nocfo_toolkit.mcp.tool_access import ToolTag
+from fastmcp.tools.tool import ToolAnnotations
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.schemas import (
     DeletedResponse,
@@ -24,7 +24,12 @@ from nocfo_toolkit.mcp.curated.utils import decode_tool_handle
 
 @tool(
     name="invoicing_purchase_invoices_list",
-    tags={ToolTag.READ_ONLY.value},
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
     description=(
         "List purchase invoices for the selected business. Use `invoice_number` for deterministic lookup. "
         "`import_source`, `is_paid`, and `is_past_due` narrow compact scans before falling back to `search`."
@@ -50,7 +55,12 @@ async def invoicing_purchase_invoices_list(
 
 @tool(
     name="invoicing_purchase_invoice_retrieve",
-    tags={ToolTag.READ_ONLY.value},
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
     description=(
         "Retrieve one purchase invoice from invoicing_purchase_invoices_list.items[].tool_handle. When linked to imported banking data, "
         "related bank transaction and document details are included for exact follow-up."
@@ -75,6 +85,12 @@ async def invoicing_purchase_invoice_retrieve(
 
 @tool(
     name="invoicing_purchase_invoice_update",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
     description=("Update one purchase invoice by user-facing invoice_number."),
 )
 async def invoicing_purchase_invoice_update(
@@ -101,6 +117,12 @@ async def invoicing_purchase_invoice_update(
 
 @tool(
     name="invoicing_purchase_invoice_delete",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
     description=("Delete one purchase invoice by user-facing invoice_number."),
 )
 async def invoicing_purchase_invoice_delete(

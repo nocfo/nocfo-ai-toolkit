@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastmcp.tools import tool
-from nocfo_toolkit.mcp.tool_access import ToolTag
+from fastmcp.tools.tool import ToolAnnotations
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.bookkeeping.document import document_by_number
 from nocfo_toolkit.mcp.curated.schemas import (
@@ -22,7 +22,12 @@ from nocfo_toolkit.mcp.curated.schemas import (
 
 @tool(
     name="bookkeeping_document_relations_list",
-    tags={ToolTag.READ_ONLY.value},
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
     description="List document-to-document relations for a context document.",
     output_schema=ListEnvelope[RelationSummary].model_json_schema(),
 )
@@ -43,7 +48,12 @@ async def bookkeeping_document_relations_list(
 
 @tool(
     name="bookkeeping_document_relation_suggestions_list",
-    tags={ToolTag.READ_ONLY.value},
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
     description="List suggested document relations with reasons and scores.",
     output_schema=ListEnvelope[RelationSummary].model_json_schema(),
 )
@@ -64,6 +74,12 @@ async def bookkeeping_document_relation_suggestions_list(
 
 @tool(
     name="bookkeeping_document_relation_create",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
     description="Create a relation between two documents using document numbers and relation role/type.",
 )
 async def bookkeeping_document_relation_create(
@@ -90,6 +106,12 @@ async def bookkeeping_document_relation_create(
 
 @tool(
     name="bookkeeping_document_relation_delete",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
     description="Delete a relation listed for the same document context.",
 )
 async def bookkeeping_document_relation_delete(

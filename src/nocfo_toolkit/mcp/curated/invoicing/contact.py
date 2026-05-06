@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastmcp.tools import tool
-from nocfo_toolkit.mcp.tool_access import ToolTag
+from fastmcp.tools.tool import ToolAnnotations
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.schemas import (
     ContactCreateInput,
@@ -24,7 +24,12 @@ from nocfo_toolkit.mcp.curated.schemas import (
 
 @tool(
     name="invoicing_contacts_list",
-    tags={ToolTag.READ_ONLY.value},
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
     description=(
         "List contacts for the selected business. Supports search and filters such as invoicing-enabled, "
         "exact name, and excluded contact ID. Use `contact_business_id` to search by asiakastunnus."
@@ -51,7 +56,12 @@ async def invoicing_contacts_list(
 
 @tool(
     name="invoicing_contact_retrieve",
-    tags={ToolTag.READ_ONLY.value},
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
     description="Retrieve one contact by tool_handle or contact_id for exact follow-up.",
 )
 async def invoicing_contact_retrieve(
@@ -75,6 +85,12 @@ async def invoicing_contact_retrieve(
 
 @tool(
     name="invoicing_contact_create",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
     description="Create a contact for invoicing and bookkeeping workflows.",
 )
 async def invoicing_contact_create(params: ContactCreateInput) -> dict[str, Any]:
@@ -92,6 +108,12 @@ async def invoicing_contact_create(params: ContactCreateInput) -> dict[str, Any]
 
 @tool(
     name="invoicing_contact_update",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
     description=(
         "Update one contact by contact ID or exact name. If the user gives asiakastunnus, "
         "retrieve the contact by contact_business_id first."
@@ -125,6 +147,12 @@ async def invoicing_contact_update(
 
 @tool(
     name="invoicing_contact_delete",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
     description=(
         "Delete one contact by contact ID or exact name. This can fail when the contact is already used "
         "by invoices or bookkeeping documents."

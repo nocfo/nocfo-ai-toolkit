@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastmcp.tools import tool
-from nocfo_toolkit.mcp.tool_access import ToolTag
+from fastmcp.tools.tool import ToolAnnotations
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.schemas import (
     AccountActionInput,
@@ -42,7 +42,12 @@ account_fields = (
 
 @tool(
     name="bookkeeping_accounts_list",
-    tags={ToolTag.READ_ONLY.value},
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
     description="List bookkeeping accounts by account number, account range, name query, type, usage, or visibility. Use account numbers when talking with users.",
     output_schema=ListEnvelope[AccountListItem].model_json_schema(),
 )
@@ -64,7 +69,12 @@ async def bookkeeping_accounts_list(params: AccountListInput) -> dict[str, Any]:
 
 @tool(
     name="bookkeeping_account_retrieve",
-    tags={ToolTag.READ_ONLY.value},
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
     description="Retrieve one account from bookkeeping_accounts_list.items[].tool_handle.",
 )
 async def bookkeeping_account_retrieve(
@@ -86,6 +96,12 @@ async def bookkeeping_account_retrieve(
 
 @tool(
     name="bookkeeping_account_create",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
     description="Create a bookkeeping account. Use account numbers and account names that match the user request.",
 )
 async def bookkeeping_account_create(params: PayloadInput) -> dict[str, Any]:
@@ -103,6 +119,12 @@ async def bookkeeping_account_create(params: PayloadInput) -> dict[str, Any]:
 
 @tool(
     name="bookkeeping_account_update",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
     description="Update a bookkeeping account selected by account_number.",
 )
 async def bookkeeping_account_update(params: AccountPayloadInput) -> dict[str, Any]:
@@ -126,6 +148,12 @@ async def bookkeeping_account_update(params: AccountPayloadInput) -> dict[str, A
 
 @tool(
     name="bookkeeping_account_delete",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
     description="Delete a bookkeeping account selected by account_number.",
 )
 async def bookkeeping_account_delete(params: AccountNumberInput) -> dict[str, Any]:
@@ -148,6 +176,12 @@ async def bookkeeping_account_delete(params: AccountNumberInput) -> dict[str, An
 
 @tool(
     name="bookkeeping_account_action",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
     description="Show or hide a bookkeeping account selected by account_number.",
 )
 async def bookkeeping_account_action(params: AccountActionInput) -> dict[str, Any]:

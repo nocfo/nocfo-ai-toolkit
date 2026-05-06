@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastmcp.tools import tool
-from nocfo_toolkit.mcp.tool_access import ToolTag
+from fastmcp.tools.tool import ToolAnnotations
 from fastmcp.exceptions import ToolError
 
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
@@ -25,7 +25,12 @@ header_fields = ("id", "name", "type", "parent_id", "parent_ids", "level")
 
 @tool(
     name="bookkeeping_headers_list",
-    tags={ToolTag.READ_ONLY.value},
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
     description="List optional account header hierarchy. Returns feature_disabled if headers are not enabled.",
     output_schema=ListEnvelope[HeaderSummary].model_json_schema(),
 )
@@ -56,7 +61,12 @@ async def bookkeeping_headers_list(params: HeaderListInput) -> dict[str, Any]:
 
 @tool(
     name="bookkeeping_header_retrieve",
-    tags={ToolTag.READ_ONLY.value},
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
     description="Retrieve one account header by header_id from bookkeeping_headers_list.",
 )
 async def bookkeeping_header_retrieve(params: HeaderIdInput) -> dict[str, Any]:
@@ -72,6 +82,12 @@ async def bookkeeping_header_retrieve(params: HeaderIdInput) -> dict[str, Any]:
 
 @tool(
     name="bookkeeping_header_create",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
     description="Create an account header when account headers are enabled for the business.",
 )
 async def bookkeeping_header_create(params: HeaderPayloadInput) -> dict[str, Any]:

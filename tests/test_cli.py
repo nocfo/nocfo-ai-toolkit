@@ -47,23 +47,3 @@ def test_missing_token_error_guides_user(monkeypatch, tmp_path) -> None:
     combined_output = result.output + getattr(result, "stderr", "")
     assert "NOCFO_API_TOKEN" in combined_output
     assert "nocfo auth configure" in combined_output
-
-
-def test_mcp_split_endpoints_flag_is_forwarded(monkeypatch) -> None:
-    captured: dict[str, object] = {}
-
-    def fake_run_server(config, *, options=None) -> None:  # type: ignore[no-untyped-def]
-        captured["split_endpoints_enabled"] = getattr(
-            options, "split_endpoints_enabled", None
-        )
-
-    monkeypatch.setattr("nocfo_toolkit.mcp.server.run_server", fake_run_server)
-
-    runner = CliRunner()
-    result = runner.invoke(
-        app,
-        ["--api-token", "pat_12345678", "mcp", "--split-endpoints"],
-    )
-
-    assert result.exit_code == 0
-    assert captured["split_endpoints_enabled"] is True

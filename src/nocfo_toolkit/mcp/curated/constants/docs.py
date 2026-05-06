@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastmcp.tools import tool
-from nocfo_toolkit.mcp.tool_access import ToolTag
+from fastmcp.tools.tool import ToolAnnotations
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.instructions import BLUEPRINT_GUIDE, GLOSSARY
 from nocfo_toolkit.mcp.curated.schemas import (
@@ -21,7 +21,12 @@ from nocfo_toolkit.mcp.curated.schemas import (
 
 @tool(
     name="constants_retrieve",
-    tags={ToolTag.READ_ONLY.value},
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
     description="Retrieve constants payloads used by accounting workflows. Use kind=vat_codes or kind=vat_rates.",
 )
 async def constants_retrieve(params: ConstantsRetrieveInput) -> dict[str, Any]:
@@ -51,7 +56,12 @@ async def constants_retrieve(params: ConstantsRetrieveInput) -> dict[str, Any]:
 
 @tool(
     name="docs_retrieve",
-    tags={ToolTag.READ_ONLY.value},
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
     description="Retrieve concise NoCFO MCP guidance docs by kind=blueprint or kind=glossary.",
 )
 async def docs_retrieve(params: DocsRetrieveInput) -> dict[str, Any]:

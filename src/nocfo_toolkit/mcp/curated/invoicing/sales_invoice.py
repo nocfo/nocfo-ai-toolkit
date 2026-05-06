@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastmcp.tools import tool
-from nocfo_toolkit.mcp.tool_access import ToolTag
+from fastmcp.tools.tool import ToolAnnotations
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.errors import raise_tool_error
 from nocfo_toolkit.mcp.curated.schemas import (
@@ -29,7 +29,12 @@ from nocfo_toolkit.mcp.curated.utils import decode_tool_handle
 
 @tool(
     name="invoicing_sales_invoices_list",
-    tags={ToolTag.READ_ONLY.value},
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
     description="List sales invoices by invoice number, status, dates, receiver, reference, or query.",
     output_schema=ListEnvelope[SalesInvoiceListItem].model_json_schema(),
 )
@@ -52,7 +57,12 @@ async def invoicing_sales_invoices_list(
 
 @tool(
     name="invoicing_sales_invoice_retrieve",
-    tags={ToolTag.READ_ONLY.value},
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
     description="Retrieve one sales invoice from invoicing_sales_invoices_list.items[].tool_handle.",
 )
 async def invoicing_sales_invoice_retrieve(
@@ -72,6 +82,12 @@ async def invoicing_sales_invoice_retrieve(
 
 @tool(
     name="invoicing_sales_invoice_create",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
     description="Create a sales invoice using invoice fields and rows from the user request.",
 )
 async def invoicing_sales_invoice_create(params: PayloadInput) -> dict[str, Any]:
@@ -90,6 +106,12 @@ async def invoicing_sales_invoice_create(params: PayloadInput) -> dict[str, Any]
 
 @tool(
     name="invoicing_sales_invoice_update",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
     description="Update a sales invoice by invoice_number or tool_handle.",
 )
 async def invoicing_sales_invoice_update(
@@ -111,6 +133,12 @@ async def invoicing_sales_invoice_update(
 
 @tool(
     name="invoicing_sales_invoice_delete",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
     description="Delete a sales invoice by invoice_number or tool_handle.",
 )
 async def invoicing_sales_invoice_delete(
@@ -126,6 +154,12 @@ async def invoicing_sales_invoice_delete(
 
 @tool(
     name="invoicing_sales_invoice_action",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
     description="Run a sales invoice workflow action: accept, mark_paid, mark_unpaid, mark_credit_loss, or disable_recurrence.",
 )
 async def invoicing_sales_invoice_action(
@@ -154,7 +188,12 @@ async def invoicing_sales_invoice_action(
 
 @tool(
     name="invoicing_sales_invoice_delivery_methods",
-    tags={ToolTag.READ_ONLY.value},
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
     description="List available delivery methods before sending a sales invoice.",
 )
 async def invoicing_sales_invoice_delivery_methods(
@@ -173,6 +212,12 @@ async def invoicing_sales_invoice_delivery_methods(
 
 @tool(
     name="invoicing_sales_invoice_send",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
     description="Send a sales invoice using a selected delivery method. Call only after the user explicitly confirms sending.",
 )
 async def invoicing_sales_invoice_send(

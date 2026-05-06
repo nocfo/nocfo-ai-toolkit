@@ -8,7 +8,7 @@ from typing import Any
 
 from fastmcp.exceptions import ToolError
 from fastmcp.tools import tool
-from nocfo_toolkit.mcp.tool_access import ToolTag
+from fastmcp.tools.tool import ToolAnnotations
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.bookkeeping.document import document_by_number
 from nocfo_toolkit.mcp.curated.errors import raise_tool_error
@@ -31,7 +31,12 @@ from nocfo_toolkit.mcp.curated.schemas import (
 
 @tool(
     name="bookkeeping_tags_list",
-    tags={ToolTag.READ_ONLY.value},
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
     description="List business tags used across bookkeeping documents and invoices, and as tag filters in reporting.",
     output_schema=ListEnvelope[TagSummary].model_json_schema(),
 )
@@ -50,6 +55,12 @@ async def bookkeeping_tags_list(params: TagListInput) -> dict[str, Any]:
 
 @tool(
     name="bookkeeping_tag_create",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
     description="Create a new business tag. Tags can be reused across documents and invoices, and for report filtering. Use this first when the requested tag name does not yet exist, then apply it to documents with bookkeeping_document_tags_update.",
 )
 async def bookkeeping_tag_create(params: PayloadInput) -> dict[str, Any]:
@@ -84,7 +95,12 @@ async def bookkeeping_tag_create(params: PayloadInput) -> dict[str, Any]:
 
 @tool(
     name="bookkeeping_tag_retrieve",
-    tags={ToolTag.READ_ONLY.value},
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
     description="Retrieve one business tag by tag_id from bookkeeping_tags_list.",
 )
 async def bookkeeping_tag_retrieve(params: IdInput) -> dict[str, Any]:
@@ -98,6 +114,12 @@ async def bookkeeping_tag_retrieve(params: IdInput) -> dict[str, Any]:
 
 @tool(
     name="bookkeeping_tag_update",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
     description="Update one business tag by tag_id from bookkeeping_tags_list.",
 )
 async def bookkeeping_tag_update(params: IdPayloadInput) -> dict[str, Any]:
@@ -115,6 +137,12 @@ async def bookkeeping_tag_update(params: IdPayloadInput) -> dict[str, Any]:
 
 @tool(
     name="bookkeeping_tag_delete",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
     description="Delete one business tag by tag_id from bookkeeping_tags_list.",
 )
 async def bookkeeping_tag_delete(params: IdInput) -> dict[str, Any]:
@@ -127,6 +155,12 @@ async def bookkeeping_tag_delete(params: IdInput) -> dict[str, Any]:
 
 @tool(
     name="bookkeeping_document_tags_update",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
     description="Replace a document's tags by document_number and tag names. Use shared business tags from bookkeeping_tags_list. Tag names must already exist; create missing tags first with bookkeeping_tag_create.",
 )
 async def bookkeeping_document_tags_update(params: TagNamesInput) -> dict[str, Any]:
@@ -155,7 +189,12 @@ async def bookkeeping_document_tags_update(params: TagNamesInput) -> dict[str, A
 
 @tool(
     name="bookkeeping_files_list",
-    tags={ToolTag.READ_ONLY.value},
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
     description="List uploaded files/attachments metadata.",
     output_schema=ListEnvelope[FileSummary].model_json_schema(),
 )
@@ -174,7 +213,12 @@ async def bookkeeping_files_list(params: TagListInput) -> dict[str, Any]:
 
 @tool(
     name="bookkeeping_file_retrieve",
-    tags={ToolTag.READ_ONLY.value},
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
     description="Retrieve uploaded file metadata by file_id from bookkeeping_files_list.",
 )
 async def bookkeeping_file_retrieve(params: IdInput) -> dict[str, Any]:
@@ -188,6 +232,12 @@ async def bookkeeping_file_retrieve(params: IdInput) -> dict[str, Any]:
 
 @tool(
     name="bookkeeping_file_update",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
     description="Update uploaded file metadata by file_id from bookkeeping_files_list.",
 )
 async def bookkeeping_file_update(params: IdPayloadInput) -> dict[str, Any]:
@@ -205,6 +255,12 @@ async def bookkeeping_file_update(params: IdPayloadInput) -> dict[str, Any]:
 
 @tool(
     name="bookkeeping_file_delete",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
     description="Delete an uploaded file by file_id from bookkeeping_files_list.",
 )
 async def bookkeeping_file_delete(params: IdInput) -> dict[str, Any]:
@@ -217,6 +273,12 @@ async def bookkeeping_file_delete(params: IdInput) -> dict[str, Any]:
 
 @tool(
     name="bookkeeping_file_upload",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
     description="Upload a file attachment from base64 content and return the file handle for follow-up document workflows.",
 )
 async def bookkeeping_file_upload(params: FileUploadInput) -> dict[str, Any]:

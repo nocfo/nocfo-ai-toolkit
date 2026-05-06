@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastmcp.tools import tool
-from nocfo_toolkit.mcp.tool_access import ToolTag
+from fastmcp.tools.tool import ToolAnnotations
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.schemas import (
     BusinessPaginationInput,
@@ -23,7 +23,12 @@ from nocfo_toolkit.mcp.curated.schemas import (
 
 @tool(
     name="invoicing_products_list",
-    tags={ToolTag.READ_ONLY.value},
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
     description=(
         "List invoicing products for the selected business. Products are reusable invoice row templates "
         "and support code/name search. Use `code` for deterministic lookup when the product code is known."
@@ -49,7 +54,12 @@ async def invoicing_products_list(
 
 @tool(
     name="invoicing_product_retrieve",
-    tags={ToolTag.READ_ONLY.value},
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
     description=(
         "Retrieve one product by ID. If ID is unknown, call `invoicing_products_list` "
         "with `code` first, then use `search` as fallback."
@@ -78,6 +88,12 @@ async def invoicing_product_retrieve(params: IdentifierInput) -> dict[str, Any]:
 
 @tool(
     name="invoicing_product_create",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
     description="Create an invoicing product. Set is_vat_inclusive explicitly because it controls whether amount is VAT-inclusive or VAT-exclusive.",
 )
 async def invoicing_product_create(params: PayloadInput) -> dict[str, Any]:
@@ -95,6 +111,12 @@ async def invoicing_product_create(params: PayloadInput) -> dict[str, Any]:
 
 @tool(
     name="invoicing_product_update",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
     description="Update one invoicing product. Keep amount and is_vat_inclusive aligned (true=VAT-inclusive amount, false=VAT-exclusive amount). Prefer resolving by product code first.",
 )
 async def invoicing_product_update(
@@ -125,6 +147,12 @@ async def invoicing_product_update(
 
 @tool(
     name="invoicing_product_delete",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
     description="Delete one invoicing product. Prefer resolving it by product code first.",
 )
 async def invoicing_product_delete(params: IdentifierInput) -> dict[str, Any]:

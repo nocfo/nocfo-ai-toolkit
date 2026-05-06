@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastmcp.tools import tool
-from nocfo_toolkit.mcp.tool_access import ToolTag
+from fastmcp.tools.tool import ToolAnnotations
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.errors import raise_tool_error
 from nocfo_toolkit.mcp.curated.schemas import (
@@ -34,7 +34,12 @@ from nocfo_toolkit.mcp.curated.utils import decode_tool_handle, items
 
 @tool(
     name="bookkeeping_documents_list",
-    tags={ToolTag.READ_ONLY.value},
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
     description="List bookkeeping documents by document number, dates, contact, tag, account number, workflow state, or query.",
     output_schema=ListEnvelope[DocumentListItem].model_json_schema(),
 )
@@ -69,7 +74,12 @@ async def bookkeeping_documents_list(
 
 @tool(
     name="bookkeeping_document_retrieve",
-    tags={ToolTag.READ_ONLY.value},
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
     description="Retrieve one bookkeeping document from bookkeeping_documents_list.items[].tool_handle. Includes blueprint/entry/relation workflow summaries.",
 )
 async def bookkeeping_document_retrieve(
@@ -98,6 +108,12 @@ async def bookkeeping_document_retrieve(
 
 @tool(
     name="bookkeeping_document_create",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
     description="Create a bookkeeping document/business transaction. Blueprint is the editable posting plan; generated entries are returned for verification.",
 )
 async def bookkeeping_document_create(
@@ -134,6 +150,12 @@ async def bookkeeping_document_create(
 
 @tool(
     name="bookkeeping_document_update",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
     description="Update a document blueprint or metadata by document_number. This recalculates generated entries. If payload contains tag_names, those tags must already exist; create missing tags first with bookkeeping_tag_create.",
 )
 async def bookkeeping_document_update(
@@ -163,6 +185,12 @@ async def bookkeeping_document_update(
 
 @tool(
     name="bookkeeping_document_delete",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
     description="Delete a bookkeeping document selected by document_number.",
 )
 async def bookkeeping_document_delete(
@@ -182,7 +210,12 @@ async def bookkeeping_document_delete(
 
 @tool(
     name="bookkeeping_entries_list",
-    tags={ToolTag.READ_ONLY.value},
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
     description="List realized journal entries for a document. Entries are generated from blueprint and are read-only in MCP.",
     output_schema=ListEnvelope[EntrySummary].model_json_schema(),
 )
@@ -204,6 +237,12 @@ async def bookkeeping_entries_list(
 
 @tool(
     name="bookkeeping_document_finalize_active_suggestion",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
     description="Apply the active accounting suggestion for a draft document and finalize it.",
 )
 async def bookkeeping_document_finalize_active_suggestion(
@@ -227,6 +266,12 @@ async def bookkeeping_document_finalize_active_suggestion(
 
 @tool(
     name="bookkeeping_document_action",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=False,
+    ),
     description="Run a state action on a document: lock, unlock, flag, or unflag.",
 )
 async def bookkeeping_document_action(

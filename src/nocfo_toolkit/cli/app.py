@@ -121,14 +121,6 @@ def run_mcp_server(
             "context by exposing search_tools + call_tool."
         ),
     ),
-    split_endpoints: bool = typer.Option(
-        False,
-        "--split-endpoints/--single-endpoint",
-        help=(
-            "Enable additional MCP paths for tool access profiles: "
-            "/read (non-mutating) and /write (mutating)."
-        ),
-    ),
 ) -> None:
     """Run NoCFO MCP server over stdio or HTTP transport.
 
@@ -173,14 +165,6 @@ def run_mcp_server(
         if env_tool_search
         else tool_search
     )
-    env_split_endpoints = (
-        os.getenv("NOCFO_MCP_SPLIT_ENDPOINTS_ENABLED", "").strip().lower()
-    )
-    split_endpoints_enabled = (
-        env_split_endpoints in {"1", "true", "yes", "on"}
-        if env_split_endpoints
-        else split_endpoints
-    )
 
     options = MCPServerOptions(
         auth_mode=auth_mode_value,
@@ -188,7 +172,6 @@ def run_mcp_server(
         required_scopes=scope_items,
         stateless_http=stateless_http,
         tool_search=tool_search_enabled,
-        split_endpoints_enabled=split_endpoints_enabled,
     )
 
     if transport_normalized == "http":
