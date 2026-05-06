@@ -6,7 +6,6 @@ from typing import Any
 
 from fastmcp.tools import tool
 from nocfo_toolkit.mcp.tool_access import ToolTag
-from nocfo_toolkit.mcp.curated.confirmation import confirm_mutation
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.schemas import (
     DeletedResponse,
@@ -91,15 +90,6 @@ async def invoicing_purchase_invoice_update(
         business_slug=slug,
     )
     path = f"/v1/invoicing/{slug}/purchase_invoice/{purchase_invoice_id}/"
-    await confirm_mutation(
-        business=slug,
-        tool_name="invoicing_purchase_invoice_update",
-        target_resource={
-            "type": "purchase_invoice",
-            "id": purchase_invoice_id,
-        },
-        parameters=args.payload,
-    )
     result = await get_client().request(
         "PATCH",
         path,
@@ -126,14 +116,6 @@ async def invoicing_purchase_invoice_delete(
         business_slug=slug,
     )
     path = f"/v1/invoicing/{slug}/purchase_invoice/{purchase_invoice_id}/"
-    await confirm_mutation(
-        business=slug,
-        tool_name="invoicing_purchase_invoice_delete",
-        target_resource={
-            "type": "purchase_invoice",
-            "id": purchase_invoice_id,
-        },
-    )
     await get_client().request(
         "DELETE",
         path,

@@ -6,7 +6,6 @@ from typing import Any
 
 from fastmcp.tools import tool
 from nocfo_toolkit.mcp.tool_access import ToolTag
-from nocfo_toolkit.mcp.curated.confirmation import confirm_mutation
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.errors import raise_tool_error
 from nocfo_toolkit.mcp.curated.schemas import (
@@ -80,15 +79,6 @@ async def invoicing_sales_invoice_create(params: PayloadInput) -> dict[str, Any]
     slug = await business_slug(args.business)
     body = await resolve_sales_invoice_payload(slug, args.payload)
     path = f"/v1/invoicing/{slug}/invoice/"
-    await confirm_mutation(
-        business=slug,
-        tool_name="invoicing_sales_invoice_create",
-        target_resource={
-            "type": "sales_invoice",
-            "id": str(body.get("invoice_number") or "new"),
-        },
-        parameters=body,
-    )
     result = await get_client().request(
         "POST",
         path,
@@ -110,15 +100,6 @@ async def invoicing_sales_invoice_update(
     body = await resolve_sales_invoice_payload(slug, args.payload)
     item_id = await _resolve_sales_invoice_id(slug, args)
     path = f"/v1/invoicing/{slug}/invoice/{item_id}/"
-    await confirm_mutation(
-        business=slug,
-        tool_name="invoicing_sales_invoice_update",
-        target_resource={
-            "type": "sales_invoice",
-            "id": item_id,
-        },
-        parameters=body,
-    )
     result = await get_client().request(
         "PATCH",
         path,
@@ -139,14 +120,6 @@ async def invoicing_sales_invoice_delete(
     slug = await business_slug(args.business)
     item_id = await _resolve_sales_invoice_id(slug, args)
     path = f"/v1/invoicing/{slug}/invoice/{item_id}/"
-    await confirm_mutation(
-        business=slug,
-        tool_name="invoicing_sales_invoice_delete",
-        target_resource={
-            "type": "sales_invoice",
-            "id": item_id,
-        },
-    )
     await get_client().request("DELETE", path, business_slug=slug)
     return dump_model(DeletedResponse(invoice_number=args.invoice_number, id=item_id))
 
@@ -170,14 +143,6 @@ async def invoicing_sales_invoice_action(
     }
     path = (
         f"/v1/invoicing/{slug}/invoice/{item_id}/actions/{path_by_action[args.action]}/"
-    )
-    await confirm_mutation(
-        business=slug,
-        tool_name="invoicing_sales_invoice_action",
-        target_resource={
-            "type": "sales_invoice",
-            "id": item_id,
-        },
     )
     result = await get_client().request(
         "POST",
@@ -217,15 +182,6 @@ async def invoicing_sales_invoice_send(
     slug = await business_slug(args.business)
     item_id = await _resolve_sales_invoice_id(slug, args)
     path = f"/v1/invoicing/{slug}/invoice/{item_id}/send/"
-    await confirm_mutation(
-        business=slug,
-        tool_name="invoicing_sales_invoice_send",
-        target_resource={
-            "type": "sales_invoice",
-            "id": item_id,
-        },
-        parameters=args.payload,
-    )
     result = await get_client().request(
         "POST",
         path,

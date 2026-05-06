@@ -6,7 +6,6 @@ from typing import Any
 
 from fastmcp.tools import tool
 from nocfo_toolkit.mcp.tool_access import ToolTag
-from nocfo_toolkit.mcp.curated.confirmation import confirm_mutation
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.schemas import (
     AccountActionInput,
@@ -93,15 +92,6 @@ async def bookkeeping_account_create(params: PayloadInput) -> dict[str, Any]:
     args = params
     slug = await business_slug(args.business)
     path = f"/v1/business/{slug}/account/"
-    await confirm_mutation(
-        business=slug,
-        tool_name="bookkeeping_account_create",
-        target_resource={
-            "type": "account",
-            "id": str(args.payload.get("number") or args.payload.get("name") or "new"),
-        },
-        parameters=args.payload,
-    )
     result = await get_client().request(
         "POST",
         path,
@@ -125,15 +115,6 @@ async def bookkeeping_account_update(params: AccountPayloadInput) -> dict[str, A
         business_slug=slug,
     )
     path = f"/v1/business/{slug}/account/{account_id}/"
-    await confirm_mutation(
-        business=slug,
-        tool_name="bookkeeping_account_update",
-        target_resource={
-            "type": "account",
-            "id": account_id,
-        },
-        parameters=args.payload,
-    )
     result = await get_client().request(
         "PATCH",
         path,
@@ -157,14 +138,6 @@ async def bookkeeping_account_delete(params: AccountNumberInput) -> dict[str, An
         business_slug=slug,
     )
     path = f"/v1/business/{slug}/account/{account_id}/"
-    await confirm_mutation(
-        business=slug,
-        tool_name="bookkeeping_account_delete",
-        target_resource={
-            "type": "account",
-            "id": account_id,
-        },
-    )
     await get_client().request(
         "DELETE",
         path,
@@ -187,14 +160,6 @@ async def bookkeeping_account_action(params: AccountActionInput) -> dict[str, An
         business_slug=slug,
     )
     path = f"/v1/business/{slug}/account/{account_id}/{args.action.value}/"
-    await confirm_mutation(
-        business=slug,
-        tool_name="bookkeeping_account_action",
-        target_resource={
-            "type": "account",
-            "id": account_id,
-        },
-    )
     await get_client().request(
         "POST",
         path,

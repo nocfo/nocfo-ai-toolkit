@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 from nocfo_toolkit.mcp.curated.bookkeeping.tag_file import bookkeeping_file_upload
 from nocfo_toolkit.mcp.curated.schema.bookkeeping.tag_file import FileUploadInput
@@ -54,10 +54,6 @@ def test_bookkeeping_file_upload_sends_required_name_form_field() -> None:
             patch(
                 "nocfo_toolkit.mcp.curated.bookkeeping.tag_file.get_client",
                 return_value=_FakeClient(),
-            ),
-            patch(
-                "nocfo_toolkit.mcp.curated.bookkeeping.tag_file.confirm_mutation",
-                new=AsyncMock(),
             ),
         ):
             result = await bookkeeping_file_upload(params)

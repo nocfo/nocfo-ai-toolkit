@@ -9,7 +9,6 @@ from typing import Any
 from fastmcp.exceptions import ToolError
 from fastmcp.tools import tool
 from nocfo_toolkit.mcp.tool_access import ToolTag
-from nocfo_toolkit.mcp.curated.confirmation import confirm_mutation
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.bookkeeping.document import document_by_number
 from nocfo_toolkit.mcp.curated.errors import raise_tool_error
@@ -58,12 +57,6 @@ async def bookkeeping_tag_create(params: PayloadInput) -> dict[str, Any]:
     slug = await business_slug(args.business)
     tag_name = str(args.payload.get("name") or "").strip()
     path = f"/v1/business/{slug}/tags/"
-    await confirm_mutation(
-        business=slug,
-        tool_name="bookkeeping_tag_create",
-        target_resource={"type": "tag", "id": str(args.payload.get("name") or "new")},
-        parameters=args.payload,
-    )
     try:
         result = await get_client().request(
             "POST",
@@ -111,12 +104,6 @@ async def bookkeeping_tag_update(params: IdPayloadInput) -> dict[str, Any]:
     args = params
     slug = await business_slug(args.business)
     path = f"/v1/business/{slug}/tags/{args.id}/"
-    await confirm_mutation(
-        business=slug,
-        tool_name="bookkeeping_tag_update",
-        target_resource={"type": "tag", "id": str(args.id)},
-        parameters=args.payload,
-    )
     result = await get_client().request(
         "PATCH",
         path,
@@ -134,11 +121,6 @@ async def bookkeeping_tag_delete(params: IdInput) -> dict[str, Any]:
     args = params
     slug = await business_slug(args.business)
     path = f"/v1/business/{slug}/tags/{args.id}/"
-    await confirm_mutation(
-        business=slug,
-        tool_name="bookkeeping_tag_delete",
-        target_resource={"type": "tag", "id": str(args.id)},
-    )
     await get_client().request("DELETE", path, business_slug=slug)
     return dump_model(DeletedResponse(tag_id=args.id))
 
@@ -162,15 +144,6 @@ async def bookkeeping_document_tags_update(params: TagNamesInput) -> dict[str, A
         for name in args.tag_names
     ]
     path = f"/v1/business/{slug}/document/{document['id']}/"
-    await confirm_mutation(
-        business=slug,
-        tool_name="bookkeeping_document_tags_update",
-        target_resource={
-            "type": "document",
-            "id": int(document["id"]),
-        },
-        parameters={"tag_ids": tag_ids},
-    )
     result = await get_client().request(
         "PATCH",
         path,
@@ -221,12 +194,6 @@ async def bookkeeping_file_update(params: IdPayloadInput) -> dict[str, Any]:
     args = params
     slug = await business_slug(args.business)
     path = f"/v1/business/{slug}/files/{args.id}/"
-    await confirm_mutation(
-        business=slug,
-        tool_name="bookkeeping_file_update",
-        target_resource={"type": "file", "id": str(args.id)},
-        parameters=args.payload,
-    )
     result = await get_client().request(
         "PATCH",
         path,
@@ -244,11 +211,6 @@ async def bookkeeping_file_delete(params: IdInput) -> dict[str, Any]:
     args = params
     slug = await business_slug(args.business)
     path = f"/v1/business/{slug}/files/{args.id}/"
-    await confirm_mutation(
-        business=slug,
-        tool_name="bookkeeping_file_delete",
-        target_resource={"type": "file", "id": str(args.id)},
-    )
     await get_client().request("DELETE", path, business_slug=slug)
     return dump_model(DeletedResponse(file_id=args.id))
 
@@ -265,15 +227,6 @@ async def bookkeeping_file_upload(params: FileUploadInput) -> dict[str, Any]:
     except ValueError:
         raise_tool_error("validation_error", "file_base64 is not valid base64.")
     path = f"/v1/business/{slug}/file_upload/"
-    await confirm_mutation(
-        business=slug,
-        tool_name="bookkeeping_file_upload",
-        target_resource={"type": "file", "id": args.filename},
-        parameters={
-            "filename": args.filename,
-            "content_type": args.content_type,
-        },
-    )
     result = await get_client().request_multipart(
         path,
         files={"file": (args.filename, content, args.content_type)},

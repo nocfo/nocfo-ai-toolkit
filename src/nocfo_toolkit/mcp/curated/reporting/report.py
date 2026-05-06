@@ -6,7 +6,6 @@ from typing import Any
 
 from fastmcp.tools import tool
 from nocfo_toolkit.mcp.tool_access import ToolTag
-from nocfo_toolkit.mcp.curated.confirmation import confirm_mutation
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.schemas import (
     BalanceSheetReportInput,
@@ -89,12 +88,6 @@ async def reporting_accounting_period_update(
         args.identifier, field_name="period_id"
     )
     path = f"/v1/business/{slug}/period/{period_id}/"
-    await confirm_mutation(
-        business=slug,
-        tool_name="reporting_accounting_period_update",
-        target_resource={"type": "accounting_period", "id": str(period_id)},
-        parameters=args.payload,
-    )
     result = await get_client().request(
         "PATCH",
         path,
@@ -117,11 +110,6 @@ async def reporting_accounting_period_delete(
         args.identifier, field_name="period_id"
     )
     path = f"/v1/business/{slug}/period/{period_id}/"
-    await confirm_mutation(
-        business=slug,
-        tool_name="reporting_accounting_period_delete",
-        target_resource={"type": "accounting_period", "id": str(period_id)},
-    )
     await get_client().request(
         "DELETE",
         path,
@@ -186,12 +174,6 @@ async def reporting_vat_period_update(
         args.identifier, field_name="vat_period_id"
     )
     path = f"/v1/business/{slug}/vat_period/{vat_period_id}/"
-    await confirm_mutation(
-        business=slug,
-        tool_name="reporting_vat_period_update",
-        target_resource={"type": "vat_period", "id": str(vat_period_id)},
-        parameters=args.payload,
-    )
     result = await get_client().request(
         "PATCH",
         path,
@@ -215,11 +197,6 @@ async def reporting_vat_period_delete(params: IdentifierInput) -> dict[str, Any]
         args.identifier, field_name="vat_period_id"
     )
     path = f"/v1/business/{slug}/vat_period/{vat_period_id}/"
-    await confirm_mutation(
-        business=slug,
-        tool_name="reporting_vat_period_delete",
-        target_resource={"type": "vat_period", "id": str(vat_period_id)},
-    )
     await get_client().request(
         "DELETE",
         path,

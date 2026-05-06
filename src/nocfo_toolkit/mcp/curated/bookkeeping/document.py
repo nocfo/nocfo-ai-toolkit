@@ -6,7 +6,6 @@ from typing import Any
 
 from fastmcp.tools import tool
 from nocfo_toolkit.mcp.tool_access import ToolTag
-from nocfo_toolkit.mcp.curated.confirmation import confirm_mutation
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.errors import raise_tool_error
 from nocfo_toolkit.mcp.curated.schemas import (
@@ -115,15 +114,6 @@ async def bookkeeping_document_create(
         )
     body = await resolve_document_payload(slug, args.payload, is_patch=False)
     path = f"/v1/business/{slug}/document/"
-    await confirm_mutation(
-        business=slug,
-        tool_name="bookkeeping_document_create",
-        target_resource={
-            "type": "document",
-            "id": str(body.get("number") or body.get("description") or "new"),
-        },
-        parameters=body,
-    )
     created = await get_client().request(
         "POST",
         path,
@@ -154,15 +144,6 @@ async def bookkeeping_document_update(
     document = await document_by_number(slug, args.document_number)
     body = await resolve_document_payload(slug, args.payload, is_patch=True)
     path = f"/v1/business/{slug}/document/{document['id']}/"
-    await confirm_mutation(
-        business=slug,
-        tool_name="bookkeeping_document_update",
-        target_resource={
-            "type": "document",
-            "id": int(document["id"]),
-        },
-        parameters=body,
-    )
     updated = await get_client().request(
         "PATCH",
         path,
@@ -191,14 +172,6 @@ async def bookkeeping_document_delete(
     slug = await business_slug(args.business)
     document = await document_by_number(slug, args.document_number)
     path = f"/v1/business/{slug}/document/{document['id']}/"
-    await confirm_mutation(
-        business=slug,
-        tool_name="bookkeeping_document_delete",
-        target_resource={
-            "type": "document",
-            "id": int(document["id"]),
-        },
-    )
     await get_client().request(
         "DELETE",
         path,
@@ -243,14 +216,6 @@ async def bookkeeping_document_finalize_active_suggestion(
         f"/v1/mcp/business/{slug}/documents/{document['id']}/"
         "actions/finalize_active_suggestion/"
     )
-    await confirm_mutation(
-        business=slug,
-        tool_name="bookkeeping_document_finalize_active_suggestion",
-        target_resource={
-            "type": "document",
-            "id": int(document["id"]),
-        },
-    )
     result = await get_client().request(
         "POST",
         path,
@@ -271,14 +236,6 @@ async def bookkeeping_document_action(
     slug = await business_slug(args.business)
     document = await document_by_number(slug, args.document_number)
     path = f"/v1/business/{slug}/document/{document['id']}/action/{args.action.value}/"
-    await confirm_mutation(
-        business=slug,
-        tool_name="bookkeeping_document_action",
-        target_resource={
-            "type": "document",
-            "id": int(document["id"]),
-        },
-    )
     result = await get_client().request(
         "POST",
         path,

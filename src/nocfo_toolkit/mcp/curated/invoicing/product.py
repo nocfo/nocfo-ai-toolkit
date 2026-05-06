@@ -6,7 +6,6 @@ from typing import Any
 
 from fastmcp.tools import tool
 from nocfo_toolkit.mcp.tool_access import ToolTag
-from nocfo_toolkit.mcp.curated.confirmation import confirm_mutation
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.schemas import (
     BusinessPaginationInput,
@@ -85,15 +84,6 @@ async def invoicing_product_create(params: PayloadInput) -> dict[str, Any]:
     args = params
     slug = await business_slug(args.business)
     path = f"/v1/invoicing/{slug}/product/"
-    await confirm_mutation(
-        business=slug,
-        tool_name="invoicing_product_create",
-        target_resource={
-            "type": "product",
-            "id": str(args.payload.get("code") or args.payload.get("name") or "new"),
-        },
-        parameters=args.payload,
-    )
     result = await get_client().request(
         "POST",
         path,
@@ -124,12 +114,6 @@ async def invoicing_product_update(
         )
     )
     path = f"/v1/invoicing/{slug}/product/{product_id}/"
-    await confirm_mutation(
-        business=slug,
-        tool_name="invoicing_product_update",
-        target_resource={"type": "product", "id": product_id},
-        parameters=args.payload,
-    )
     result = await get_client().request(
         "PATCH",
         path,
@@ -158,11 +142,6 @@ async def invoicing_product_delete(params: IdentifierInput) -> dict[str, Any]:
         )
     )
     path = f"/v1/invoicing/{slug}/product/{product_id}/"
-    await confirm_mutation(
-        business=slug,
-        tool_name="invoicing_product_delete",
-        target_resource={"type": "product", "id": product_id},
-    )
     await get_client().request(
         "DELETE",
         path,

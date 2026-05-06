@@ -121,14 +121,6 @@ def run_mcp_server(
             "context by exposing search_tools + call_tool."
         ),
     ),
-    skip_confirmation: bool = typer.Option(
-        False,
-        "--skip-confirmation/--require-confirmation",
-        help=(
-            "Skip interactive mutation confirmation elicitation. "
-            "Use only in trusted automation environments."
-        ),
-    ),
     split_endpoints: bool = typer.Option(
         False,
         "--split-endpoints/--single-endpoint",
@@ -181,12 +173,6 @@ def run_mcp_server(
         if env_tool_search
         else tool_search
     )
-    env_skip_confirmation = os.getenv("NOCFO_MCP_SKIP_CONFIRMATION", "").strip().lower()
-    skip_confirmation_enabled = (
-        env_skip_confirmation in {"1", "true", "yes", "on"}
-        if env_skip_confirmation
-        else skip_confirmation
-    )
     env_split_endpoints = (
         os.getenv("NOCFO_MCP_SPLIT_ENDPOINTS_ENABLED", "").strip().lower()
     )
@@ -202,7 +188,6 @@ def run_mcp_server(
         required_scopes=scope_items,
         stateless_http=stateless_http,
         tool_search=tool_search_enabled,
-        skip_confirmation=skip_confirmation_enabled,
         split_endpoints_enabled=split_endpoints_enabled,
     )
 

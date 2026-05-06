@@ -6,7 +6,6 @@ from typing import Any
 
 from fastmcp.tools import tool
 from nocfo_toolkit.mcp.tool_access import ToolTag
-from nocfo_toolkit.mcp.curated.confirmation import confirm_mutation
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.schemas import (
     ContactCreateInput,
@@ -82,12 +81,6 @@ async def invoicing_contact_create(params: ContactCreateInput) -> dict[str, Any]
     slug = await business_slug(params.business)
     path = f"/v1/business/{slug}/contacts/"
     payload = _build_contact_create_body(params)
-    await confirm_mutation(
-        business=slug,
-        tool_name="invoicing_contact_create",
-        target_resource={"type": "contact", "id": str(params.name)},
-        parameters=payload,
-    )
     result = await get_client().request(
         "POST",
         path,
@@ -121,12 +114,6 @@ async def invoicing_contact_update(
     )
     path = f"/v1/business/{slug}/contacts/{contact_id}/"
     payload = _build_contact_patch_body(params)
-    await confirm_mutation(
-        business=slug,
-        tool_name="invoicing_contact_update",
-        target_resource={"type": "contact", "id": contact_id},
-        parameters=payload,
-    )
     result = await get_client().request(
         "PATCH",
         path,
@@ -158,11 +145,6 @@ async def invoicing_contact_delete(params: IdentifierInput) -> dict[str, Any]:
         )
     )
     path = f"/v1/business/{slug}/contacts/{contact_id}/"
-    await confirm_mutation(
-        business=slug,
-        tool_name="invoicing_contact_delete",
-        target_resource={"type": "contact", "id": contact_id},
-    )
     await get_client().request(
         "DELETE",
         path,

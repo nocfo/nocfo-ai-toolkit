@@ -8,7 +8,6 @@ from fastmcp.tools import tool
 from nocfo_toolkit.mcp.tool_access import ToolTag
 from fastmcp.exceptions import ToolError
 
-from nocfo_toolkit.mcp.curated.confirmation import confirm_mutation
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.errors import raise_tool_error
 from nocfo_toolkit.mcp.curated.schemas import (
@@ -79,15 +78,6 @@ async def bookkeeping_header_create(params: HeaderPayloadInput) -> dict[str, Any
     args = params
     slug = await business_slug(args.business)
     path = f"/v1/business/{slug}/header/"
-    await confirm_mutation(
-        business=slug,
-        tool_name="bookkeeping_header_create",
-        target_resource={
-            "type": "header",
-            "id": str(args.payload.get("name") or "new"),
-        },
-        parameters=args.payload,
-    )
     result = await get_client().request(
         "POST",
         path,

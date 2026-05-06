@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-from typing import Any
 
 from nocfo_toolkit.cli.app import app
 from typer.testing import CliRunner
@@ -50,19 +49,21 @@ def test_missing_token_error_guides_user(monkeypatch, tmp_path) -> None:
     assert "nocfo auth configure" in combined_output
 
 
-def test_mcp_skip_confirmation_flag_is_forwarded(monkeypatch) -> None:
-    captured: dict[str, Any] = {}
+def test_mcp_split_endpoints_flag_is_forwarded(monkeypatch) -> None:
+    captured: dict[str, object] = {}
 
     def fake_run_server(config, *, options=None) -> None:  # type: ignore[no-untyped-def]
-        captured["skip_confirmation"] = getattr(options, "skip_confirmation", None)
+        captured["split_endpoints_enabled"] = getattr(
+            options, "split_endpoints_enabled", None
+        )
 
     monkeypatch.setattr("nocfo_toolkit.mcp.server.run_server", fake_run_server)
 
     runner = CliRunner()
     result = runner.invoke(
         app,
-        ["--api-token", "pat_12345678", "mcp", "--skip-confirmation"],
+        ["--api-token", "pat_12345678", "mcp", "--split-endpoints"],
     )
 
     assert result.exit_code == 0
-    assert captured["skip_confirmation"] is True
+    assert captured["split_endpoints_enabled"] is True

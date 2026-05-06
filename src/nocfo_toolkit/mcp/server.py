@@ -21,10 +21,7 @@ from nocfo_toolkit.mcp.auth import (
 )
 from nocfo_toolkit.mcp.curated import SERVER_INSTRUCTIONS
 from nocfo_toolkit.mcp.curated.client import CuratedNocfoClient
-from nocfo_toolkit.mcp.curated.runtime import (
-    attach_confirmation_settings,
-    attach_curated_client,
-)
+from nocfo_toolkit.mcp.curated.runtime import attach_curated_client
 from nocfo_toolkit.mcp.http_error_capture import capture_http_error_response
 from nocfo_toolkit.mcp.middleware import MCPToolAccessMiddleware, MCPToolErrorMiddleware
 from nocfo_toolkit.mcp.search import NocfoBM25SearchTransform
@@ -172,7 +169,6 @@ class MCPServerOptions:
     required_scopes: tuple[str, ...] = ()
     stateless_http: bool = False
     tool_search: bool = False
-    skip_confirmation: bool = False
     split_endpoints_enabled: bool = False
 
 
@@ -276,7 +272,6 @@ def create_server(
         transforms=transforms,
     )
     attach_curated_client(server, curated_client)
-    attach_confirmation_settings(server, skip_confirmation=opts.skip_confirmation)
     return server
 
 

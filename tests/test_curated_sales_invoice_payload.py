@@ -18,7 +18,7 @@ from nocfo_toolkit.mcp.curated.schema.invoicing.sales_invoice import (
     SalesInvoicePayloadInput,
     SalesInvoiceSummary,
 )
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 
 def _contact_handle(contact_id: int) -> str:
@@ -129,10 +129,6 @@ def test_sales_invoice_delete_accepts_tool_handle_selector() -> None:
                 "nocfo_toolkit.mcp.curated.invoicing.sales_invoice.get_client",
                 return_value=_FakeClient(),
             ),
-            patch(
-                "nocfo_toolkit.mcp.curated.invoicing.sales_invoice.confirm_mutation",
-                new=AsyncMock(),
-            ),
         ):
             result = await invoicing_sales_invoice_delete(params)
         assert result["id"] == 77
@@ -172,10 +168,6 @@ def test_sales_invoice_update_accepts_tool_handle_selector() -> None:
                 "nocfo_toolkit.mcp.curated.invoicing.sales_invoice.get_client",
                 return_value=_FakeClient(),
             ),
-            patch(
-                "nocfo_toolkit.mcp.curated.invoicing.sales_invoice.confirm_mutation",
-                new=AsyncMock(),
-            ),
         ):
             await invoicing_sales_invoice_update(params)
 
@@ -213,10 +205,6 @@ def test_sales_invoice_action_accepts_tool_handle_selector() -> None:
             patch(
                 "nocfo_toolkit.mcp.curated.invoicing.sales_invoice.get_client",
                 return_value=_FakeClient(),
-            ),
-            patch(
-                "nocfo_toolkit.mcp.curated.invoicing.sales_invoice.confirm_mutation",
-                new=AsyncMock(),
             ),
         ):
             await invoicing_sales_invoice_action(params)
