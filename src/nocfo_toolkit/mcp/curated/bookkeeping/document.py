@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastmcp.tools import tool
+from nocfo_toolkit.mcp.tool_access import ToolTag
 from nocfo_toolkit.mcp.curated.confirmation import confirm_mutation
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.errors import raise_tool_error
@@ -34,6 +35,7 @@ from nocfo_toolkit.mcp.curated.utils import decode_tool_handle, items
 
 @tool(
     name="bookkeeping_documents_list",
+    tags={ToolTag.READ_ONLY.value},
     description="List bookkeeping documents by document number, dates, contact, tag, account number, workflow state, or query.",
     output_schema=ListEnvelope[DocumentListItem].model_json_schema(),
 )
@@ -68,6 +70,7 @@ async def bookkeeping_documents_list(
 
 @tool(
     name="bookkeeping_document_retrieve",
+    tags={ToolTag.READ_ONLY.value},
     description="Retrieve one bookkeeping document from bookkeeping_documents_list.items[].tool_handle. Includes blueprint/entry/relation workflow summaries.",
 )
 async def bookkeeping_document_retrieve(
@@ -206,6 +209,7 @@ async def bookkeeping_document_delete(
 
 @tool(
     name="bookkeeping_entries_list",
+    tags={ToolTag.READ_ONLY.value},
     description="List realized journal entries for a document. Entries are generated from blueprint and are read-only in MCP.",
     output_schema=ListEnvelope[EntrySummary].model_json_schema(),
 )

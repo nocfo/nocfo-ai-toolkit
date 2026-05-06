@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastmcp.tools import tool
+from nocfo_toolkit.mcp.tool_access import ToolTag
 from nocfo_toolkit.mcp.curated.confirmation import confirm_mutation
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.schemas import (
@@ -24,6 +25,7 @@ from nocfo_toolkit.mcp.curated.utils import decode_tool_handle
 
 @tool(
     name="invoicing_purchase_invoices_list",
+    tags={ToolTag.READ_ONLY.value},
     description=(
         "List purchase invoices for the selected business. Use `invoice_number` for deterministic lookup. "
         "`import_source`, `is_paid`, and `is_past_due` narrow compact scans before falling back to `search`."
@@ -49,6 +51,7 @@ async def invoicing_purchase_invoices_list(
 
 @tool(
     name="invoicing_purchase_invoice_retrieve",
+    tags={ToolTag.READ_ONLY.value},
     description=(
         "Retrieve one purchase invoice from invoicing_purchase_invoices_list.items[].tool_handle. When linked to imported banking data, "
         "related bank transaction and document details are included for exact follow-up."

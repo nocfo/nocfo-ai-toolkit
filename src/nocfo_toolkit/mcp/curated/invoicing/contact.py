@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastmcp.tools import tool
+from nocfo_toolkit.mcp.tool_access import ToolTag
 from nocfo_toolkit.mcp.curated.confirmation import confirm_mutation
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.schemas import (
@@ -24,6 +25,7 @@ from nocfo_toolkit.mcp.curated.schemas import (
 
 @tool(
     name="invoicing_contacts_list",
+    tags={ToolTag.READ_ONLY.value},
     description=(
         "List contacts for the selected business. Supports search and filters such as invoicing-enabled, "
         "exact name, and excluded contact ID. Use `contact_business_id` to search by asiakastunnus."
@@ -50,6 +52,7 @@ async def invoicing_contacts_list(
 
 @tool(
     name="invoicing_contact_retrieve",
+    tags={ToolTag.READ_ONLY.value},
     description="Retrieve one contact by tool_handle or contact_id for exact follow-up.",
 )
 async def invoicing_contact_retrieve(

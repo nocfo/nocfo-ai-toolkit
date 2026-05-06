@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastmcp.tools import tool
+from nocfo_toolkit.mcp.tool_access import ToolTag
 from fastmcp.exceptions import ToolError
 
 from nocfo_toolkit.mcp.curated.confirmation import confirm_mutation
@@ -25,6 +26,7 @@ header_fields = ("id", "name", "type", "parent_id", "parent_ids", "level")
 
 @tool(
     name="bookkeeping_headers_list",
+    tags={ToolTag.READ_ONLY.value},
     description="List optional account header hierarchy. Returns feature_disabled if headers are not enabled.",
     output_schema=ListEnvelope[HeaderSummary].model_json_schema(),
 )
@@ -55,6 +57,7 @@ async def bookkeeping_headers_list(params: HeaderListInput) -> dict[str, Any]:
 
 @tool(
     name="bookkeeping_header_retrieve",
+    tags={ToolTag.READ_ONLY.value},
     description="Retrieve one account header by header_id from bookkeeping_headers_list.",
 )
 async def bookkeeping_header_retrieve(params: HeaderIdInput) -> dict[str, Any]:

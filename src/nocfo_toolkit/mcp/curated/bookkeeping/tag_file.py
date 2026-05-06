@@ -8,6 +8,7 @@ from typing import Any
 
 from fastmcp.exceptions import ToolError
 from fastmcp.tools import tool
+from nocfo_toolkit.mcp.tool_access import ToolTag
 from nocfo_toolkit.mcp.curated.confirmation import confirm_mutation
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.bookkeeping.document import document_by_number
@@ -31,6 +32,7 @@ from nocfo_toolkit.mcp.curated.schemas import (
 
 @tool(
     name="bookkeeping_tags_list",
+    tags={ToolTag.READ_ONLY.value},
     description="List business tags used across bookkeeping documents and invoices, and as tag filters in reporting.",
     output_schema=ListEnvelope[TagSummary].model_json_schema(),
 )
@@ -89,6 +91,7 @@ async def bookkeeping_tag_create(params: PayloadInput) -> dict[str, Any]:
 
 @tool(
     name="bookkeeping_tag_retrieve",
+    tags={ToolTag.READ_ONLY.value},
     description="Retrieve one business tag by tag_id from bookkeeping_tags_list.",
 )
 async def bookkeeping_tag_retrieve(params: IdInput) -> dict[str, Any]:
@@ -179,6 +182,7 @@ async def bookkeeping_document_tags_update(params: TagNamesInput) -> dict[str, A
 
 @tool(
     name="bookkeeping_files_list",
+    tags={ToolTag.READ_ONLY.value},
     description="List uploaded files/attachments metadata.",
     output_schema=ListEnvelope[FileSummary].model_json_schema(),
 )
@@ -197,6 +201,7 @@ async def bookkeeping_files_list(params: TagListInput) -> dict[str, Any]:
 
 @tool(
     name="bookkeeping_file_retrieve",
+    tags={ToolTag.READ_ONLY.value},
     description="Retrieve uploaded file metadata by file_id from bookkeeping_files_list.",
 )
 async def bookkeeping_file_retrieve(params: IdInput) -> dict[str, Any]:

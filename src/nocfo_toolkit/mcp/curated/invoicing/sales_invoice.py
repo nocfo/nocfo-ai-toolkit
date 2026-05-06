@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastmcp.tools import tool
+from nocfo_toolkit.mcp.tool_access import ToolTag
 from nocfo_toolkit.mcp.curated.confirmation import confirm_mutation
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.errors import raise_tool_error
@@ -29,6 +30,7 @@ from nocfo_toolkit.mcp.curated.utils import decode_tool_handle
 
 @tool(
     name="invoicing_sales_invoices_list",
+    tags={ToolTag.READ_ONLY.value},
     description="List sales invoices by invoice number, status, dates, receiver, reference, or query.",
     output_schema=ListEnvelope[SalesInvoiceListItem].model_json_schema(),
 )
@@ -51,6 +53,7 @@ async def invoicing_sales_invoices_list(
 
 @tool(
     name="invoicing_sales_invoice_retrieve",
+    tags={ToolTag.READ_ONLY.value},
     description="Retrieve one sales invoice from invoicing_sales_invoices_list.items[].tool_handle.",
 )
 async def invoicing_sales_invoice_retrieve(
@@ -186,6 +189,7 @@ async def invoicing_sales_invoice_action(
 
 @tool(
     name="invoicing_sales_invoice_delivery_methods",
+    tags={ToolTag.READ_ONLY.value},
     description="List available delivery methods before sending a sales invoice.",
 )
 async def invoicing_sales_invoice_delivery_methods(

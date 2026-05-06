@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastmcp.tools import tool
+from nocfo_toolkit.mcp.tool_access import ToolTag
 from nocfo_toolkit.mcp.curated.runtime import get_client
 from nocfo_toolkit.mcp.curated.schemas import (
     BusinessContextInput,
@@ -20,6 +21,7 @@ from nocfo_toolkit.mcp.curated.schemas import (
 
 @tool(
     name="common_current_business_retrieve",
+    tags={ToolTag.READ_ONLY.value},
     description="Resolve the effective NoCFO business. Use business='current' by default in business-scoped tools.",
     output_schema=ResolvedBusiness.model_json_schema(),
 )
@@ -32,6 +34,7 @@ async def common_current_business_retrieve(
 
 @tool(
     name="common_accessible_businesses_list",
+    tags={ToolTag.READ_ONLY.value},
     description="List businesses accessible to the authenticated user for choosing business scope.",
     output_schema=ListEnvelope[BusinessSummary].model_json_schema(),
 )
@@ -49,6 +52,7 @@ async def common_accessible_businesses_list(
 
 @tool(
     name="common_user_retrieve",
+    tags={ToolTag.READ_ONLY.value},
     description="Retrieve the authenticated user profile.",
 )
 async def common_user_retrieve() -> dict[str, Any]:

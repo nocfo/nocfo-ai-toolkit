@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastmcp.tools import tool
+from nocfo_toolkit.mcp.tool_access import ToolTag
 from nocfo_toolkit.mcp.curated.confirmation import confirm_mutation
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.bookkeeping.document import document_by_number
@@ -22,6 +23,7 @@ from nocfo_toolkit.mcp.curated.schemas import (
 
 @tool(
     name="bookkeeping_document_relations_list",
+    tags={ToolTag.READ_ONLY.value},
     description="List document-to-document relations for a context document.",
     output_schema=ListEnvelope[RelationSummary].model_json_schema(),
 )
@@ -42,6 +44,7 @@ async def bookkeeping_document_relations_list(
 
 @tool(
     name="bookkeeping_document_relation_suggestions_list",
+    tags={ToolTag.READ_ONLY.value},
     description="List suggested document relations with reasons and scores.",
     output_schema=ListEnvelope[RelationSummary].model_json_schema(),
 )

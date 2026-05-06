@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastmcp.tools import tool
+from nocfo_toolkit.mcp.tool_access import ToolTag
 from nocfo_toolkit.mcp.curated.confirmation import confirm_mutation
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.schemas import (
@@ -23,6 +24,7 @@ from nocfo_toolkit.mcp.curated.schemas import (
 
 @tool(
     name="invoicing_products_list",
+    tags={ToolTag.READ_ONLY.value},
     description=(
         "List invoicing products for the selected business. Products are reusable invoice row templates "
         "and support code/name search. Use `code` for deterministic lookup when the product code is known."
@@ -48,6 +50,7 @@ async def invoicing_products_list(
 
 @tool(
     name="invoicing_product_retrieve",
+    tags={ToolTag.READ_ONLY.value},
     description=(
         "Retrieve one product by ID. If ID is unknown, call `invoicing_products_list` "
         "with `code` first, then use `search` as fallback."

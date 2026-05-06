@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastmcp.tools import tool
+from nocfo_toolkit.mcp.tool_access import ToolTag
 from nocfo_toolkit.mcp.curated.confirmation import confirm_mutation
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.schemas import (
@@ -42,6 +43,7 @@ account_fields = (
 
 @tool(
     name="bookkeeping_accounts_list",
+    tags={ToolTag.READ_ONLY.value},
     description="List bookkeeping accounts by account number, account range, name query, type, usage, or visibility. Use account numbers when talking with users.",
     output_schema=ListEnvelope[AccountListItem].model_json_schema(),
 )
@@ -63,6 +65,7 @@ async def bookkeeping_accounts_list(params: AccountListInput) -> dict[str, Any]:
 
 @tool(
     name="bookkeeping_account_retrieve",
+    tags={ToolTag.READ_ONLY.value},
     description="Retrieve one account from bookkeeping_accounts_list.items[].tool_handle.",
 )
 async def bookkeeping_account_retrieve(

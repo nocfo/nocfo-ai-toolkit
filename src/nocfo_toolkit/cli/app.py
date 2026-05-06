@@ -129,6 +129,14 @@ def run_mcp_server(
             "Use only in trusted automation environments."
         ),
     ),
+    split_endpoints: bool = typer.Option(
+        False,
+        "--split-endpoints/--single-endpoint",
+        help=(
+            "Enable additional MCP paths for tool access profiles: "
+            "/read (non-mutating) and /write (mutating)."
+        ),
+    ),
 ) -> None:
     """Run NoCFO MCP server over stdio or HTTP transport.
 
@@ -179,6 +187,14 @@ def run_mcp_server(
         if env_skip_confirmation
         else skip_confirmation
     )
+    env_split_endpoints = (
+        os.getenv("NOCFO_MCP_SPLIT_ENDPOINTS_ENABLED", "").strip().lower()
+    )
+    split_endpoints_enabled = (
+        env_split_endpoints in {"1", "true", "yes", "on"}
+        if env_split_endpoints
+        else split_endpoints
+    )
 
     options = MCPServerOptions(
         auth_mode=auth_mode_value,
@@ -187,6 +203,7 @@ def run_mcp_server(
         stateless_http=stateless_http,
         tool_search=tool_search_enabled,
         skip_confirmation=skip_confirmation_enabled,
+        split_endpoints_enabled=split_endpoints_enabled,
     )
 
     if transport_normalized == "http":

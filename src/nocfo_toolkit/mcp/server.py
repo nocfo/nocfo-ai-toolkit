@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 import httpx
+import uvicorn
 from fastmcp.server.dependencies import get_http_headers
 from fastmcp.server.providers import FileSystemProvider
 
@@ -25,8 +26,12 @@ from nocfo_toolkit.mcp.curated.runtime import (
     attach_curated_client,
 )
 from nocfo_toolkit.mcp.http_error_capture import capture_http_error_response
-from nocfo_toolkit.mcp.middleware import MCPToolErrorMiddleware
+from nocfo_toolkit.mcp.middleware import MCPToolAccessMiddleware, MCPToolErrorMiddleware
 from nocfo_toolkit.mcp.search import NocfoBM25SearchTransform
+from nocfo_toolkit.mcp.tool_access import (
+    ToolAccessProfile,
+    request_tool_access_profile,
+)
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -35,6 +40,86 @@ MCP_RUNTIME_CONTRACT_HEADER = "X-Nocfo-MCP-Contract"
 MCP_RUNTIME_CONTRACT_VALUE = "1"
 MCP_CLIENT_HEADER = "x-nocfo-client"
 MCP_DEFAULT_CLIENT = "nocfo-mcp"
+READ_ONLY_PATH_SEGMENT = "read"
+WRITE_PATH_SEGMENT = "write"
+
+
+def _normalize_http_path(path: str) -> str:
+    return f"/{(path or '/').strip('/')}"
+
+
+def _append_segment(base_path: str, segment: str) -> str:
+    if base_path == "/":
+        return f"/{segment}"
+    return f"{base_path}/{segment}"
+
+
+def _oauth_protected_resource_path(mcp_path: str) -> str:
+    if mcp_path == "/":
+        return "/.well-known/oauth-protected-resource/"
+    return f"/.well-known/oauth-protected-resource{mcp_path}"
+
+
+@dataclass(frozen=True)
+class SplitHTTPPaths:
+    base_path: str
+    read_path: str
+    write_path: str
+    oauth_base_path: str
+    oauth_read_path: str
+    oauth_write_path: str
+
+
+def _split_http_paths(base_path: str) -> SplitHTTPPaths:
+    normalized_base_path = _normalize_http_path(base_path)
+    read_path = _append_segment(normalized_base_path, READ_ONLY_PATH_SEGMENT)
+    write_path = _append_segment(normalized_base_path, WRITE_PATH_SEGMENT)
+    return SplitHTTPPaths(
+        base_path=normalized_base_path,
+        read_path=read_path,
+        write_path=write_path,
+        oauth_base_path=_oauth_protected_resource_path(normalized_base_path),
+        oauth_read_path=_oauth_protected_resource_path(read_path),
+        oauth_write_path=_oauth_protected_resource_path(write_path),
+    )
+
+
+class SplitPathASGIAdapter:
+    """Expose /read and /write aliases while serving one FastMCP app."""
+
+    def __init__(self, app: Any, paths: SplitHTTPPaths) -> None:
+        self._app = app
+        self._paths = paths
+
+    def _resolve_profile_mapping(self, path: str) -> tuple[str, ToolAccessProfile]:
+        if path == self._paths.read_path:
+            return self._paths.base_path, ToolAccessProfile.READ
+        if path == self._paths.write_path:
+            return self._paths.base_path, ToolAccessProfile.WRITE
+        if path == self._paths.oauth_read_path:
+            return self._paths.oauth_base_path, ToolAccessProfile.READ
+        if path == self._paths.oauth_write_path:
+            return self._paths.oauth_base_path, ToolAccessProfile.WRITE
+        if path == self._paths.base_path:
+            return self._paths.base_path, ToolAccessProfile.ALL
+        if path == self._paths.oauth_base_path:
+            return self._paths.oauth_base_path, ToolAccessProfile.ALL
+        return path, ToolAccessProfile.ALL
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if scope.get("type") != "http":
+            await self._app(scope, receive, send)
+            return
+        original_path = str(scope.get("path") or "")
+        rewritten_path, profile = self._resolve_profile_mapping(original_path)
+        with request_tool_access_profile(profile):
+            if rewritten_path == original_path:
+                await self._app(scope, receive, send)
+                return
+            rewritten_scope = dict(scope)
+            rewritten_scope["path"] = rewritten_path
+            rewritten_scope["raw_path"] = rewritten_path.encode("utf-8")
+            await self._app(rewritten_scope, receive, send)
 
 
 def _request_requires_mcp_runtime_contract_header(request: httpx.Request) -> bool:
@@ -88,6 +173,7 @@ class MCPServerOptions:
     stateless_http: bool = False
     tool_search: bool = False
     skip_confirmation: bool = False
+    split_endpoints_enabled: bool = False
 
 
 def _create_pat_client(
@@ -185,7 +271,7 @@ def create_server(
         name=opts.name,
         instructions=SERVER_INSTRUCTIONS,
         auth=server_auth,
-        middleware=[MCPToolErrorMiddleware()],
+        middleware=[MCPToolAccessMiddleware(), MCPToolErrorMiddleware()],
         providers=[FileSystemProvider(root=curated_provider_root)],
         transforms=transforms,
     )
@@ -217,11 +303,18 @@ def run_http_server(
 
     server = create_server(config, options=options)
     opts = options or MCPServerOptions()
+    normalized_path = _normalize_http_path(path)
+    if opts.split_endpoints_enabled:
+        paths = _split_http_paths(normalized_path)
+        app = server.http_app(path=paths.base_path, stateless_http=opts.stateless_http)
+        split_app = SplitPathASGIAdapter(app, paths)
+        uvicorn.run(split_app, host=host, port=port)
+        return
     server.run(
         transport="http",
         host=host,
         port=port,
-        path=path,
+        path=normalized_path,
         stateless_http=opts.stateless_http,
     )
 

@@ -35,9 +35,17 @@ from nocfo_toolkit.mcp.server import (
     _inject_mcp_runtime_contract_header,
     _inject_mcp_client_header,
     _request_requires_mcp_runtime_contract_header,
+    _split_http_paths,
     create_server,
     MCPServerOptions,
+    SplitPathASGIAdapter,
     run_http_server,
+)
+from nocfo_toolkit.mcp.tool_access import (
+    ToolAccessProfile,
+    ToolTag,
+    is_tool_allowed_for_request_profile,
+    request_tool_access_profile,
 )
 
 
@@ -203,6 +211,88 @@ def test_create_server_registers_curated_tool_surface() -> None:
     assert "docs_glossary" not in names
     assert "docs_bootstrap" not in names
     assert "constants_permissions_retrieve" not in names
+
+
+def test_read_profile_lists_only_non_mutating_tools() -> None:
+    config = ToolkitConfig(
+        api_token=None,
+        token_source=TokenSource.MISSING,
+        base_url="https://api-prd.nocfo.io",
+        output_format=OutputFormat.TABLE,
+        jwt_token="jwt-only-token",
+    )
+    server = create_server(config)
+    with request_tool_access_profile(ToolAccessProfile.READ):
+        tools = asyncio.run(server.list_tools())
+    names = {tool.name for tool in tools}
+    assert "bookkeeping_documents_list" in names
+    assert "bookkeeping_document_create" not in names
+
+
+def test_write_profile_lists_only_mutating_tools() -> None:
+    config = ToolkitConfig(
+        api_token=None,
+        token_source=TokenSource.MISSING,
+        base_url="https://api-prd.nocfo.io",
+        output_format=OutputFormat.TABLE,
+        jwt_token="jwt-only-token",
+    )
+    server = create_server(config)
+    with request_tool_access_profile(ToolAccessProfile.WRITE):
+        tools = asyncio.run(server.list_tools())
+    names = {tool.name for tool in tools}
+    assert "bookkeeping_document_create" in names
+    assert "bookkeeping_documents_list" not in names
+
+
+def test_read_profile_defaults_untagged_tools_to_write_side() -> None:
+    assert (
+        is_tool_allowed_for_request_profile(
+            tags=None,
+            profile=ToolAccessProfile.READ,
+        )
+        is False
+    )
+    assert (
+        is_tool_allowed_for_request_profile(
+            tags=None,
+            profile=ToolAccessProfile.WRITE,
+        )
+        is True
+    )
+    assert (
+        is_tool_allowed_for_request_profile(
+            tags={ToolTag.READ_ONLY.value},
+            profile=ToolAccessProfile.READ,
+        )
+        is True
+    )
+    assert (
+        is_tool_allowed_for_request_profile(
+            tags={ToolTag.READ_ONLY.value},
+            profile=ToolAccessProfile.WRITE,
+        )
+        is False
+    )
+
+
+def test_read_profile_blocks_mutating_tool_call() -> None:
+    config = ToolkitConfig(
+        api_token=None,
+        token_source=TokenSource.MISSING,
+        base_url="https://api-prd.nocfo.io",
+        output_format=OutputFormat.TABLE,
+        jwt_token="jwt-only-token",
+    )
+    server = create_server(config)
+    with request_tool_access_profile(ToolAccessProfile.READ):
+        with pytest.raises(Exception, match="tool_not_available"):
+            asyncio.run(
+                server.call_tool(
+                    "bookkeeping_document_create",
+                    {"params": {"business": "current", "payload": {}}},
+                )
+            )
 
 
 def test_curated_tools_use_pydantic_params_argument() -> None:
@@ -898,3 +988,63 @@ def test_run_http_server_forwards_stateless_http(monkeypatch) -> None:
     assert captured_kwargs["port"] == 9000
     assert captured_kwargs["path"] == "/mcp"
     assert captured_kwargs["stateless_http"] is True
+
+
+def test_split_path_adapter_exposes_read_and_write_aliases() -> None:
+    config = ToolkitConfig(
+        api_token=None,
+        token_source=TokenSource.MISSING,
+        base_url="https://api-prd.nocfo.io",
+        output_format=OutputFormat.TABLE,
+        jwt_token="jwt-only-token",
+    )
+    server = create_server(config)
+    split_app = SplitPathASGIAdapter(server.http_app(path="/"), _split_http_paths("/"))
+    with TestClient(split_app) as client:
+        assert client.get("/read").status_code != 404
+        assert client.get("/write").status_code != 404
+
+
+def test_run_http_server_with_split_endpoints_uses_uvicorn(monkeypatch) -> None:
+    config = ToolkitConfig(base_url="http://localhost:8000")
+    captured: dict[str, object] = {}
+
+    class DummyServer:
+        def http_app(self, **kwargs):
+            captured["http_app_kwargs"] = kwargs
+
+            async def app(scope, receive, send):
+                await send(
+                    {
+                        "type": "http.response.start",
+                        "status": 200,
+                        "headers": [],
+                    }
+                )
+                await send({"type": "http.response.body", "body": b""})
+
+            return app
+
+    monkeypatch.setattr(
+        "nocfo_toolkit.mcp.server.create_server",
+        lambda config, options=None: DummyServer(),
+    )
+
+    def fake_run(app, *, host, port):
+        captured["app"] = app
+        captured["host"] = host
+        captured["port"] = port
+
+    monkeypatch.setattr("nocfo_toolkit.mcp.server.uvicorn.run", fake_run)
+
+    run_http_server(
+        config,
+        host="127.0.0.1",
+        port=9000,
+        path="/",
+        options=MCPServerOptions(split_endpoints_enabled=True),
+    )
+
+    assert isinstance(captured["app"], SplitPathASGIAdapter)
+    assert captured["host"] == "127.0.0.1"
+    assert captured["port"] == 9000
