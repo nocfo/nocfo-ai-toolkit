@@ -157,6 +157,37 @@ class SalesInvoiceActionInput(InvoiceLookupInput):
     )
 
 
+class SalesInvoiceLookupInput(BusinessContextInput):
+    invoice_number: int | str | None = Field(
+        default=None,
+        description="Invoice number visible to the user.",
+    )
+    tool_handle: str | None = Field(
+        default=None,
+        description="Copy this value from invoicing_sales_invoices_list.items[].tool_handle and pass it unchanged.",
+    )
+
+    @model_validator(mode="after")
+    def validate_selector(self) -> "SalesInvoiceLookupInput":
+        has_invoice_number = self.invoice_number is not None
+        has_tool_handle = self.tool_handle is not None
+        if has_invoice_number == has_tool_handle:
+            raise ValueError("Provide exactly one of invoice_number or tool_handle.")
+        return self
+
+
+class SalesInvoicePayloadInput(SalesInvoiceLookupInput):
+    payload: dict[str, Any] = Field(
+        description="Fields to create or update. Prefer user-facing values such as account_number, document_number, invoice_number, tag_names, or contact names when supported."
+    )
+
+
+class SalesInvoiceActionSelectorInput(SalesInvoiceLookupInput):
+    action: enum_or_str(SalesInvoiceAction) = Field(
+        description="Action to run on the selected resource."
+    )
+
+
 class SalesInvoiceSummary(AgentModel):
     tool_handle: str | None = Field(
         default=None,

@@ -6,9 +6,14 @@ import json
 from types import SimpleNamespace
 
 from nocfo_toolkit.mcp.curated.invoicing.sales_invoice import (
+    invoicing_sales_invoice_delete,
     resolve_sales_invoice_payload,
 )
 from nocfo_toolkit.mcp.curated.schema.invoicing.product import ProductSummary
+from nocfo_toolkit.mcp.curated.schema.invoicing.sales_invoice import (
+    SalesInvoiceLookupInput,
+)
+from unittest.mock import AsyncMock, patch
 
 
 def _contact_handle(contact_id: int) -> str:
@@ -77,6 +82,58 @@ def test_resolve_sales_invoice_payload_resolves_contact_name() -> None:
         "business_slug": "demo",
         "search_param": "search",
     }
+
+
+def test_resolve_sales_invoice_payload_patch_omits_missing_receiver() -> None:
+    async def _run() -> None:
+        client = SimpleNamespace(resolve_id=None)
+        ctx = SimpleNamespace(client=client)
+        payload = {"description": "Only description change"}
+        body = await resolve_sales_invoice_payload(ctx, "demo", payload)
+        assert body["description"] == "Only description change"
+        assert "receiver" not in body
+
+    asyncio.run(_run())
+
+
+def test_sales_invoice_delete_accepts_tool_handle_selector() -> None:
+    calls: list[tuple[str, str]] = []
+
+    class _FakeClient:
+        async def request(self, method: str, path: str, **_: object) -> None:
+            calls.append((method, path))
+            return None
+
+    async def _run() -> None:
+        params = SalesInvoiceLookupInput.model_validate(
+            {
+                "business": "demo",
+                "tool_handle": base64.urlsafe_b64encode(
+                    json.dumps(
+                        {"resource": "invoicing_sales_invoice", "id": 77}
+                    ).encode("utf-8")
+                ).decode("ascii"),
+            }
+        )
+        with (
+            patch(
+                "nocfo_toolkit.mcp.curated.invoicing.sales_invoice.business_slug",
+                return_value="demo",
+            ),
+            patch(
+                "nocfo_toolkit.mcp.curated.invoicing.sales_invoice.get_client",
+                return_value=_FakeClient(),
+            ),
+            patch(
+                "nocfo_toolkit.mcp.curated.invoicing.sales_invoice.confirm_mutation",
+                new=AsyncMock(),
+            ),
+        ):
+            result = await invoicing_sales_invoice_delete(params)
+        assert result["id"] == 77
+
+    asyncio.run(_run())
+    assert calls == [("DELETE", "/v1/invoicing/demo/invoice/77/")]
 
 
 def test_product_summary_exposes_vat_inclusive_toggle_fields() -> None:

@@ -10,14 +10,14 @@ from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.errors import raise_tool_error
 from nocfo_toolkit.mcp.curated.schemas import (
     DeletedResponse,
-    InvoiceLookupInput,
     InvoiceRetrieveInput,
-    InvoicePayloadInput,
     ListEnvelope,
     SalesInvoiceAction,
-    SalesInvoiceActionInput,
+    SalesInvoiceActionSelectorInput,
     SalesInvoiceListItem,
+    SalesInvoiceLookupInput,
     SalesInvoiceMutationPayload,
+    SalesInvoicePayloadInput,
     SalesInvoicesListInput,
     SalesInvoiceSummary,
     PayloadInput,
@@ -97,20 +97,15 @@ async def invoicing_sales_invoice_create(params: PayloadInput) -> dict[str, Any]
 
 @tool(
     name="invoicing_sales_invoice_update",
-    description="Update a sales invoice by user-facing invoice_number.",
+    description="Update a sales invoice by invoice_number or tool_handle.",
 )
 async def invoicing_sales_invoice_update(
-    params: InvoicePayloadInput,
+    params: SalesInvoicePayloadInput,
 ) -> dict[str, Any]:
     args = params
     slug = await business_slug(args.business)
     body = await resolve_sales_invoice_payload(slug, args.payload)
-    item_id = await get_client().resolve_id(
-        f"/v1/invoicing/{slug}/invoice/",
-        lookup_field="invoice_number",
-        lookup_value=args.invoice_number,
-        business_slug=slug,
-    )
+    item_id = await _resolve_sales_invoice_id(slug, args)
     path = f"/v1/invoicing/{slug}/invoice/{item_id}/"
     await confirm_mutation(
         business=slug,
@@ -132,19 +127,14 @@ async def invoicing_sales_invoice_update(
 
 @tool(
     name="invoicing_sales_invoice_delete",
-    description="Delete a sales invoice by user-facing invoice_number.",
+    description="Delete a sales invoice by invoice_number or tool_handle.",
 )
 async def invoicing_sales_invoice_delete(
-    params: InvoiceLookupInput,
+    params: SalesInvoiceLookupInput,
 ) -> dict[str, Any]:
     args = params
     slug = await business_slug(args.business)
-    item_id = await get_client().resolve_id(
-        f"/v1/invoicing/{slug}/invoice/",
-        lookup_field="invoice_number",
-        lookup_value=args.invoice_number,
-        business_slug=slug,
-    )
+    item_id = await _resolve_sales_invoice_id(slug, args)
     path = f"/v1/invoicing/{slug}/invoice/{item_id}/"
     await confirm_mutation(
         business=slug,
@@ -155,7 +145,7 @@ async def invoicing_sales_invoice_delete(
         },
     )
     await get_client().request("DELETE", path, business_slug=slug)
-    return dump_model(DeletedResponse(invoice_number=args.invoice_number))
+    return dump_model(DeletedResponse(invoice_number=args.invoice_number, id=item_id))
 
 
 @tool(
@@ -163,16 +153,11 @@ async def invoicing_sales_invoice_delete(
     description="Run a sales invoice workflow action: accept, mark_paid, mark_unpaid, mark_credit_loss, or disable_recurrence.",
 )
 async def invoicing_sales_invoice_action(
-    params: SalesInvoiceActionInput,
+    params: SalesInvoiceActionSelectorInput,
 ) -> dict[str, Any]:
     args = params
     slug = await business_slug(args.business)
-    item_id = await get_client().resolve_id(
-        f"/v1/invoicing/{slug}/invoice/",
-        lookup_field="invoice_number",
-        lookup_value=args.invoice_number,
-        business_slug=slug,
-    )
+    item_id = await _resolve_sales_invoice_id(slug, args)
     path_by_action = {
         SalesInvoiceAction.accept: "accept",
         SalesInvoiceAction.mark_paid: "paid",
@@ -204,16 +189,11 @@ async def invoicing_sales_invoice_action(
     description="List available delivery methods before sending a sales invoice.",
 )
 async def invoicing_sales_invoice_delivery_methods(
-    params: InvoiceLookupInput,
+    params: SalesInvoiceLookupInput,
 ) -> dict[str, Any]:
     args = params
     slug = await business_slug(args.business)
-    item_id = await get_client().resolve_id(
-        f"/v1/invoicing/{slug}/invoice/",
-        lookup_field="invoice_number",
-        lookup_value=args.invoice_number,
-        business_slug=slug,
-    )
+    item_id = await _resolve_sales_invoice_id(slug, args)
     result = await get_client().request(
         "GET",
         f"/v1/invoicing/{slug}/invoice/{item_id}/delivery_methods/",
@@ -227,16 +207,11 @@ async def invoicing_sales_invoice_delivery_methods(
     description="Send a sales invoice using a selected delivery method. Call only after the user explicitly confirms sending.",
 )
 async def invoicing_sales_invoice_send(
-    params: InvoicePayloadInput,
+    params: SalesInvoicePayloadInput,
 ) -> dict[str, Any]:
     args = params
     slug = await business_slug(args.business)
-    item_id = await get_client().resolve_id(
-        f"/v1/invoicing/{slug}/invoice/",
-        lookup_field="invoice_number",
-        lookup_value=args.invoice_number,
-        business_slug=slug,
-    )
+    item_id = await _resolve_sales_invoice_id(slug, args)
     path = f"/v1/invoicing/{slug}/invoice/{item_id}/send/"
     await confirm_mutation(
         business=slug,
@@ -274,6 +249,7 @@ async def resolve_sales_invoice_payload(
     body = SalesInvoiceMutationPayload.model_validate(payload_data).model_dump(
         mode="json",
         by_alias=True,
+        exclude_unset=True,
     )
     await _resolve_receiver_reference(client, slug, body)
     return body
@@ -324,4 +300,19 @@ async def _resolve_receiver_reference(
         "receiver must be a contact reference.",
         "Provide receiver as contact ID, contact tool_handle, exact contact name, or {id: <contact_id>}.",
         status_code=400,
+    )
+
+
+async def _resolve_sales_invoice_id(slug: str, args: SalesInvoiceLookupInput) -> int:
+    if args.tool_handle:
+        return decode_tool_handle(
+            args.tool_handle,
+            expected_resource="invoicing_sales_invoice",
+        )
+    assert args.invoice_number is not None
+    return await get_client().resolve_id(
+        f"/v1/invoicing/{slug}/invoice/",
+        lookup_field="invoice_number",
+        lookup_value=args.invoice_number,
+        business_slug=slug,
     )
