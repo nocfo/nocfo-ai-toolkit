@@ -71,6 +71,16 @@ class ContactCreateInput(BusinessContextInput):
         default=None, description="User or contact email address."
     )
     phone: str | None = Field(default=None, description="Contact phone number.")
+    phone_number: str | None = Field(
+        default=None, description="Primary phone number for the contact."
+    )
+    notes: str | None = Field(
+        default=None, description="Internal notes stored for the contact."
+    )
+    name_aliases: list[str] = Field(
+        default_factory=list,
+        description="Alternative names used to match this contact.",
+    )
     vat_number: str | None = Field(default=None, description="VAT number.")
     y_tunnus: str | None = Field(
         default=None, description="Finnish business ID (Y-tunnus)."
@@ -116,6 +126,16 @@ class ContactUpdateInput(BusinessContextInput):
         default=None, description="User or contact email address."
     )
     phone: str | None = Field(default=None, description="Contact phone number.")
+    phone_number: str | None = Field(
+        default=None, description="Primary phone number for the contact."
+    )
+    notes: str | None = Field(
+        default=None, description="Internal notes stored for the contact."
+    )
+    name_aliases: list[str] = Field(
+        default_factory=list,
+        description="Alternative names used to match this contact.",
+    )
     vat_number: str | None = Field(default=None, description="VAT number.")
     y_tunnus: str | None = Field(
         default=None, description="Finnish business ID (Y-tunnus)."
@@ -177,6 +197,16 @@ class ContactSummary(AgentModel):
     )
     can_be_invoiced_via_einvoice: bool | None = Field(
         default=None, description="Whether invoices can be sent by e-invoice."
+    )
+    phone_number: str | None = Field(
+        default=None, description="Primary phone number for the contact."
+    )
+    notes: str | None = Field(
+        default=None, description="Internal notes stored for the contact."
+    )
+    name_aliases: list[str] = Field(
+        default_factory=list,
+        description="Alternative names used to match this contact.",
     )
 
     @model_validator(mode="before")
