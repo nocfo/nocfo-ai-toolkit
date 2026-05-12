@@ -133,6 +133,14 @@ class DocumentListInput(BusinessPaginationInput):
     account_number: int | None = Field(
         default=None, description="User-facing bookkeeping account number, e.g. 1910."
     )
+    vat_code: int | None = Field(
+        default=None,
+        description="VAT code filter from document entries. For valid values, call constants_retrieve with kind=vat_codes.",
+    )
+    vat_rate: float | int | None = Field(
+        default=None,
+        description="VAT rate filter from document entries. For valid/effective values, call constants_retrieve with kind=vat_rates (date_at required).",
+    )
     is_draft: bool | None = Field(
         default=None, description="Whether the bookkeeping document is still a draft."
     )
@@ -152,6 +160,8 @@ class DocumentListInput(BusinessPaginationInput):
             "date_lte": self.date_to,
             "contact": self.contact_id,
             "account_number": self.account_number,
+            "vat_code": self.vat_code,
+            "vat_rate": self.vat_rate,
             "is_draft": self.is_draft,
             "is_locked": self.is_locked,
             "is_flagged": self.is_flagged,

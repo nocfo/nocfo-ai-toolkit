@@ -9,6 +9,7 @@ from nocfo_toolkit.mcp.curated.bookkeeping.document import (
     resolve_document_payload,
 )
 from nocfo_toolkit.mcp.curated.schema.bookkeeping.document import (
+    DocumentListInput,
     DocumentMutationPayload,
 )
 
@@ -141,3 +142,20 @@ def test_resolve_document_payload_uses_contact_name_field() -> None:
         "business_slug": "demo",
         "search_param": "search",
     }
+
+
+def test_document_list_query_params_include_vat_filters() -> None:
+    params = DocumentListInput.model_validate(
+        {
+            "business": "demo",
+            "document_number": "1001",
+            "vat_code": 300,
+            "vat_rate": 25.5,
+            "is_draft": False,
+        }
+    ).query_params()
+
+    assert params["number"] == "1001"
+    assert params["vat_code"] == 300
+    assert params["vat_rate"] == 25.5
+    assert params["is_draft"] is False

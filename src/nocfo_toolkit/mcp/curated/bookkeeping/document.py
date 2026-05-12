@@ -40,7 +40,7 @@ from nocfo_toolkit.mcp.curated.utils import decode_tool_handle, items
         idempotentHint=True,
         openWorldHint=False,
     ),
-    description="List bookkeeping documents by document number, dates, contact, tag, account number, workflow state, or query.",
+    description="List bookkeeping documents by document number, dates, contact, tag, account number, VAT code/rate, workflow state, or query.",
     output_schema=ListEnvelope[DocumentListItem].model_json_schema(),
 )
 async def bookkeeping_documents_list(

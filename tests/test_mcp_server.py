@@ -207,6 +207,11 @@ def test_curated_tools_use_pydantic_params_argument() -> None:
     document_list_schema = by_name["bookkeeping_documents_list"].parameters
     assert set(document_list_schema["properties"]) == {"params"}
     assert "DocumentListInput" in document_list_schema["$defs"]
+    document_list_fields = document_list_schema["$defs"]["DocumentListInput"][
+        "properties"
+    ]
+    assert "vat_code" in document_list_fields
+    assert "vat_rate" in document_list_fields
 
     invoice_action_schema = by_name["invoicing_sales_invoice_action"].parameters
     assert set(invoice_action_schema["properties"]) == {"params"}
