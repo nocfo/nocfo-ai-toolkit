@@ -39,6 +39,27 @@ def test_normalize_http_error_supports_drf_detail_shape() -> None:
     assert "hint" in normalized
 
 
+def test_normalize_http_error_preserves_missing_invoicing_field_details() -> None:
+    payload = {
+        "message": "Request validation failed.",
+        "missing_invoicing_fields": ["invoicing_street", "invoicing_city"],
+        "invoicing_street": "This field is required when enabling invoicing.",
+    }
+    normalized = normalize_http_error(
+        tool_name="invoicing_contact_update",
+        status_code=400,
+        payload=payload,
+        fallback_message="fallback",
+    )
+
+    assert normalized["summary"] == "Request validation failed."
+    assert normalized["field_errors"]["missing_invoicing_fields"] == [
+        "invoicing_street",
+        "invoicing_city",
+    ]
+    assert "invoicing_street" in normalized["field_errors"]
+
+
 def test_normalize_http_error_supports_oauth_shape() -> None:
     payload = {
         "error": "invalid_client_metadata",

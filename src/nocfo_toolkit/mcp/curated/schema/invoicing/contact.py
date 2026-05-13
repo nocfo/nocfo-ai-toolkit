@@ -61,6 +61,18 @@ class ContactCreateInput(BusinessContextInput):
     invoicing_einvoice_operator: str | None = Field(
         default=None, description="E-invoice operator for the contact."
     )
+    is_invoicing_enabled: bool | None = Field(
+        default=None, description="Enable invoicing for this contact."
+    )
+    invoicing_street: str | None = Field(
+        default=None, description="Invoice recipient street address."
+    )
+    invoicing_city: str | None = Field(
+        default=None, description="Invoice recipient city."
+    )
+    invoicing_postal_code: str | None = Field(
+        default=None, description="Invoice recipient postal code."
+    )
     invoicing_country: str | None = Field(
         default=None, description="Invoicing country code or value."
     )
@@ -85,10 +97,6 @@ class ContactCreateInput(BusinessContextInput):
     y_tunnus: str | None = Field(
         default=None, description="Finnish business ID (Y-tunnus)."
     )
-    city: str | None = Field(default=None, description="Contact city.")
-    country: str | None = Field(default=None, description="Contact country.")
-    address: str | None = Field(default=None, description="Street address.")
-    zip_code: str | None = Field(default=None, description="ZIP/postal code.")
 
 
 class ContactUpdateInput(BusinessContextInput):
@@ -116,6 +124,18 @@ class ContactUpdateInput(BusinessContextInput):
     invoicing_einvoice_operator: str | None = Field(
         default=None, description="E-invoice operator for the contact."
     )
+    is_invoicing_enabled: bool | None = Field(
+        default=None, description="Enable invoicing for this contact."
+    )
+    invoicing_street: str | None = Field(
+        default=None, description="Invoice recipient street address."
+    )
+    invoicing_city: str | None = Field(
+        default=None, description="Invoice recipient city."
+    )
+    invoicing_postal_code: str | None = Field(
+        default=None, description="Invoice recipient postal code."
+    )
     invoicing_country: str | None = Field(
         default=None, description="Invoicing country code or value."
     )
@@ -140,10 +160,6 @@ class ContactUpdateInput(BusinessContextInput):
     y_tunnus: str | None = Field(
         default=None, description="Finnish business ID (Y-tunnus)."
     )
-    city: str | None = Field(default=None, description="Contact city.")
-    country: str | None = Field(default=None, description="Contact country.")
-    address: str | None = Field(default=None, description="Street address.")
-    zip_code: str | None = Field(default=None, description="ZIP/postal code.")
 
     @model_validator(mode="after")
     def validate_has_patch_fields(self) -> "ContactUpdateInput":
@@ -183,6 +199,18 @@ class ContactSummary(AgentModel):
     invoicing_einvoice_operator: Any | None = Field(
         default=None, description="E-invoice operator for the contact."
     )
+    is_invoicing_enabled: bool | None = Field(
+        default=None, description="Whether invoicing is enabled for this contact."
+    )
+    invoicing_street: str | None = Field(
+        default=None, description="Invoice recipient street address."
+    )
+    invoicing_city: str | None = Field(
+        default=None, description="Invoice recipient city."
+    )
+    invoicing_postal_code: str | None = Field(
+        default=None, description="Invoice recipient postal code."
+    )
     invoicing_country: str | None = Field(
         default=None, description="Invoicing country code or value."
     )
@@ -197,6 +225,10 @@ class ContactSummary(AgentModel):
     )
     can_be_invoiced_via_einvoice: bool | None = Field(
         default=None, description="Whether invoices can be sent by e-invoice."
+    )
+    missing_invoicing_fields: list[str] = Field(
+        default_factory=list,
+        description="Missing fields required before this contact can be invoiced.",
     )
     phone_number: str | None = Field(
         default=None, description="Primary phone number for the contact."
