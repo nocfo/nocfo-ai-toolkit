@@ -191,6 +191,10 @@ def _build_contact_patch_body(params: ContactUpdateInput) -> dict[str, Any]:
         "invoicing_email",
         "invoicing_electronic_address",
         "invoicing_einvoice_operator",
+        "is_invoicing_enabled",
+        "invoicing_street",
+        "invoicing_city",
+        "invoicing_postal_code",
         "invoicing_country",
         "invoicing_language",
         "email",
@@ -200,10 +204,6 @@ def _build_contact_patch_body(params: ContactUpdateInput) -> dict[str, Any]:
         "name_aliases",
         "vat_number",
         "y_tunnus",
-        "city",
-        "country",
-        "address",
-        "zip_code",
     ):
         if field_name in params.model_fields_set:
             body[field_name] = getattr(params, field_name)
@@ -219,6 +219,10 @@ def _build_contact_create_body(params: ContactCreateInput) -> dict[str, Any]:
         "invoicing_email",
         "invoicing_electronic_address",
         "invoicing_einvoice_operator",
+        "is_invoicing_enabled",
+        "invoicing_street",
+        "invoicing_city",
+        "invoicing_postal_code",
         "invoicing_country",
         "invoicing_language",
         "email",
@@ -228,10 +232,6 @@ def _build_contact_create_body(params: ContactCreateInput) -> dict[str, Any]:
         "name_aliases",
         "vat_number",
         "y_tunnus",
-        "city",
-        "country",
-        "address",
-        "zip_code",
     ):
         value = getattr(params, field_name)
         if value is not None:

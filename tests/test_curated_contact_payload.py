@@ -32,7 +32,7 @@ def test_build_contact_patch_body_preserves_explicit_nulls() -> None:
         {
             "identifier": "123",
             "invoicing_email": None,
-            "city": "Helsinki",
+            "invoicing_city": "Helsinki",
             "business": "current",
         }
     )
@@ -40,8 +40,29 @@ def test_build_contact_patch_body_preserves_explicit_nulls() -> None:
     body = _build_contact_patch_body(params)
     assert "invoicing_email" in body
     assert body["invoicing_email"] is None
-    assert body["city"] == "Helsinki"
+    assert body["invoicing_city"] == "Helsinki"
     assert "phone" not in body
+
+
+def test_build_contact_create_body_includes_invoicing_activation_fields() -> None:
+    params = ContactCreateInput.model_validate(
+        {
+            "name": "Invoice Contact",
+            "is_invoicing_enabled": True,
+            "invoicing_street": "Testikatu 1",
+            "invoicing_city": "Helsinki",
+            "invoicing_postal_code": "00100",
+            "invoicing_country": "FI",
+            "business": "current",
+        }
+    )
+
+    body = _build_contact_create_body(params)
+    assert body["is_invoicing_enabled"] is True
+    assert body["invoicing_street"] == "Testikatu 1"
+    assert body["invoicing_city"] == "Helsinki"
+    assert body["invoicing_postal_code"] == "00100"
+    assert body["invoicing_country"] == "FI"
 
 
 def test_build_contact_create_body_includes_new_contact_fields() -> None:
@@ -87,6 +108,8 @@ def test_contact_summary_maps_new_contact_fields_from_backend_payload() -> None:
             "name_aliases": ["ABC Group"],
             "notes": "VIP",
             "phone_number": None,
+            "is_invoicing_enabled": True,
+            "missing_invoicing_fields": ["contact_business_id"],
         }
     )
 
@@ -94,3 +117,5 @@ def test_contact_summary_maps_new_contact_fields_from_backend_payload() -> None:
     assert summary.name_aliases == ["ABC Group"]
     assert summary.notes == "VIP"
     assert summary.phone_number is None
+    assert summary.is_invoicing_enabled is True
+    assert summary.missing_invoicing_fields == ["contact_business_id"]

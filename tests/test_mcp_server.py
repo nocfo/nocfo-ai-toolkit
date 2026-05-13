@@ -448,6 +448,37 @@ def test_contact_list_exposes_paginated_lookup_fields() -> None:
     assert "contact_business_id" in fields
 
 
+def test_contact_mutation_schema_uses_backend_aligned_invoicing_fields() -> None:
+    config = ToolkitConfig(
+        api_token=None,
+        token_source=TokenSource.MISSING,
+        base_url="https://api-prd.nocfo.io",
+        output_format=OutputFormat.TABLE,
+        jwt_token="jwt-only-token",
+    )
+    server = create_server(config)
+    tools = asyncio.run(server.list_tools(run_middleware=False))
+    by_name = {tool.name: tool for tool in tools}
+
+    create_fields = by_name["invoicing_contact_create"].parameters["$defs"][
+        "ContactCreateInput"
+    ]["properties"]
+    update_fields = by_name["invoicing_contact_update"].parameters["$defs"][
+        "ContactUpdateInput"
+    ]["properties"]
+
+    for fields in (create_fields, update_fields):
+        assert "is_invoicing_enabled" in fields
+        assert "invoicing_street" in fields
+        assert "invoicing_city" in fields
+        assert "invoicing_postal_code" in fields
+        assert "invoicing_country" in fields
+        assert "address" not in fields
+        assert "zip_code" not in fields
+        assert "country" not in fields
+        assert "city" not in fields
+
+
 def test_constants_retrieve_uses_kind_switch_input() -> None:
     config = ToolkitConfig(
         api_token=None,
