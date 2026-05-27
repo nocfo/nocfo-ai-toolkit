@@ -166,7 +166,10 @@ class SalesInvoiceLookupInput(BusinessContextInput):
     )
     tool_handle: str | None = Field(
         default=None,
-        description="Copy this value from invoicing_sales_invoices_list.items[].tool_handle and pass it unchanged.",
+        description=(
+            "Copy this value from invoicing_sales_invoices_list.items[].tool_handle and pass it unchanged. "
+            "When provided, do not also set invoice_number or any other resource selector field."
+        ),
     )
 
     @model_validator(mode="after")
