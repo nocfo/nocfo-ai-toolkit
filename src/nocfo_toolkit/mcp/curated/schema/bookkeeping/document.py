@@ -156,8 +156,8 @@ class DocumentListInput(BusinessPaginationInput):
         params = {
             "number": self.document_number,
             "search": self.query,
-            "date_gte": self.date_from,
-            "date_lte": self.date_to,
+            "date_from": self.date_from,
+            "date_to": self.date_to,
             "contact": self.contact_id,
             "account_number": self.account_number,
             "vat_code": self.vat_code,

@@ -159,3 +159,18 @@ def test_document_list_query_params_include_vat_filters() -> None:
     assert params["vat_code"] == 300
     assert params["vat_rate"] == 25.5
     assert params["is_draft"] is False
+
+
+def test_document_list_query_params_use_backend_date_filter_names() -> None:
+    params = DocumentListInput.model_validate(
+        {
+            "business": "demo",
+            "date_from": "2026-04-01",
+            "date_to": "2026-04-07",
+        }
+    ).query_params()
+
+    assert params == {
+        "date_from": "2026-04-01",
+        "date_to": "2026-04-07",
+    }
