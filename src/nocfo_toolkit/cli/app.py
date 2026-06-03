@@ -125,7 +125,8 @@ def run_mcp_server(
     """Run NoCFO MCP server over stdio or HTTP transport.
 
     Stdio mode accepts either NOCFO_JWT_TOKEN or NOCFO_API_TOKEN.
-    Optional NOCFO_CLIENT overrides default `nocfo-mcp` x-nocfo-client.
+    Optional NOCFO_CLIENT overrides default `nocfo-mcp` x-nocfo-client header.
+    Use `nocfo-agent` for internal agent MCP and `nocfo-mcp` for external MCP.
     HTTP oauth mode uses connector bearer verification + JWT exchange flow.
     """
 

@@ -214,6 +214,73 @@ def test_passthrough_auth_forwards_incoming_x_nocfo_client_header(
     asyncio.run(run())
 
 
+def test_passthrough_auth_uses_configured_default_client_when_incoming_missing(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "nocfo_toolkit.mcp.auth.get_http_headers",
+        lambda include=None: {"authorization": "Bearer incoming-jwt"},
+    )
+    auth = PassthroughAuth(default_client="nocfo-agent")
+
+    async def run() -> None:
+        transport = httpx.MockTransport(
+            lambda request: httpx.Response(
+                200,
+                json={"x_nocfo_client": request.headers.get("x-nocfo-client")},
+            )
+        )
+        async with httpx.AsyncClient(
+            base_url="https://api.example.com",
+            transport=transport,
+            auth=auth,
+        ) as client:
+            response = await client.get("/v1/businesses/")
+            assert response.status_code == 200
+            assert response.json()["x_nocfo_client"] == "nocfo-agent"
+
+    asyncio.run(run())
+
+
+def test_jwt_exchange_auth_uses_configured_default_client(monkeypatch) -> None:
+    exchange_calls = {"count": 0}
+    expected_jwt = _build_unverified_jwt_with_exp(int(time.time()) + 3600)
+
+    def fake_access_token():
+        return SimpleNamespace(
+            token="incoming-bearer",
+            claims={"sub": "user-1"},
+        )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/auth/jwt/":
+            exchange_calls["count"] += 1
+            assert request.headers["x-nocfo-client"] == "nocfo-mcp"
+            return httpx.Response(200, json={"token": expected_jwt})
+
+        assert request.headers["x-nocfo-client"] == "nocfo-mcp"
+        return httpx.Response(200, json={"ok": True})
+
+    monkeypatch.setattr(
+        "nocfo_toolkit.mcp.auth.get_http_headers", lambda include=None: {}
+    )
+    monkeypatch.setattr("nocfo_toolkit.mcp.auth.get_access_token", fake_access_token)
+    auth = JwtExchangeAuth(default_client="nocfo-mcp")
+
+    async def run() -> None:
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(
+            base_url="https://api.example.com",
+            transport=transport,
+            auth=auth,
+        ) as client:
+            response = await client.get("/v1/businesses/")
+            assert response.status_code == 200
+
+    asyncio.run(run())
+    assert exchange_calls["count"] == 1
+
+
 def test_passthrough_auth_requires_authorization_header(monkeypatch) -> None:
     monkeypatch.setattr(
         "nocfo_toolkit.mcp.auth.get_http_headers",

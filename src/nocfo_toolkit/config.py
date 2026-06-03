@@ -20,6 +20,10 @@ except ModuleNotFoundError:  # pragma: no cover - fallback for minimal environme
 DEFAULT_BASE_URL = "https://api-prd.nocfo.io"
 AUTH_HEADER_SCHEME = "Token"
 MIN_PAT_LENGTH = 8
+NOCFO_CLIENT_HEADER = "x-nocfo-client"
+NOCFO_CLIENT_MCP = "nocfo-mcp"
+NOCFO_CLIENT_AGENT = "nocfo-agent"
+NOCFO_CLIENT_DEFAULT = NOCFO_CLIENT_MCP
 
 
 class OutputFormat(str, Enum):

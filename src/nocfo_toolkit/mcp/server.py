@@ -8,15 +8,20 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 import httpx
-from fastmcp.server.dependencies import get_http_headers
 from fastmcp.server.providers import FileSystemProvider
 
-from nocfo_toolkit.config import AUTH_HEADER_SCHEME, ToolkitConfig
+from nocfo_toolkit.config import (
+    AUTH_HEADER_SCHEME,
+    NOCFO_CLIENT_DEFAULT,
+    NOCFO_CLIENT_HEADER,
+    ToolkitConfig,
+)
 from nocfo_toolkit.mcp.auth import (
     MCPAuthOptions,
     JwtExchangeAuth,
     PassthroughAuth,
     build_remote_auth_provider,
+    resolve_nocfo_client,
 )
 from nocfo_toolkit.mcp.curated import SERVER_INSTRUCTIONS
 from nocfo_toolkit.mcp.curated.client import CuratedNocfoClient
@@ -30,8 +35,8 @@ if TYPE_CHECKING:
 
 MCP_RUNTIME_CONTRACT_HEADER = "X-Nocfo-MCP-Contract"
 MCP_RUNTIME_CONTRACT_VALUE = "1"
-MCP_CLIENT_HEADER = "x-nocfo-client"
-MCP_DEFAULT_CLIENT = "nocfo-mcp"
+MCP_CLIENT_HEADER = NOCFO_CLIENT_HEADER
+MCP_DEFAULT_CLIENT = NOCFO_CLIENT_DEFAULT
 
 
 def _normalize_http_path(path: str) -> str:
@@ -55,12 +60,9 @@ async def _inject_mcp_runtime_contract_header(request: httpx.Request) -> None:
 async def _inject_mcp_client_header(
     request: httpx.Request, *, default_client: str
 ) -> None:
-    incoming_headers = get_http_headers(include={MCP_CLIENT_HEADER})
-    incoming_client = (incoming_headers.get(MCP_CLIENT_HEADER) or "").strip()
-    if incoming_client:
-        request.headers[MCP_CLIENT_HEADER] = incoming_client
-        return
-    request.headers[MCP_CLIENT_HEADER] = default_client
+    request.headers[MCP_CLIENT_HEADER] = resolve_nocfo_client(
+        default_client=default_client
+    )
 
 
 def _client_event_hooks(default_client: str) -> dict[str, list[Any]]:
@@ -121,6 +123,7 @@ def _create_oauth_client(
         auth=JwtExchangeAuth(
             exchange_path=exchange_path,
             refresh_skew_seconds=refresh_skew_seconds,
+            default_client=default_client,
         ),
         timeout=timeout_seconds,
         event_hooks=_client_event_hooks(default_client),
@@ -133,7 +136,7 @@ def _create_passthrough_client(
     default_client = config.nocfo_client or MCP_DEFAULT_CLIENT
     return httpx.AsyncClient(
         base_url=config.base_url,
-        auth=PassthroughAuth(),
+        auth=PassthroughAuth(default_client=default_client),
         timeout=timeout_seconds,
         event_hooks=_client_event_hooks(default_client),
     )

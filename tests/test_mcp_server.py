@@ -76,7 +76,7 @@ def test_runtime_contract_header_requirement_uses_path_shape_only() -> None:
 
 def test_x_nocfo_client_header_defaults_to_nocfo_mcp(monkeypatch) -> None:
     monkeypatch.setattr(
-        "nocfo_toolkit.mcp.server.get_http_headers",
+        "nocfo_toolkit.mcp.auth.get_http_headers",
         lambda include=None: {},
     )
     request = httpx.Request("GET", "https://api.example.com/v1/business/")
@@ -93,7 +93,7 @@ def test_x_nocfo_client_header_defaults_to_nocfo_mcp(monkeypatch) -> None:
 
 def test_x_nocfo_client_header_passes_through_incoming_header(monkeypatch) -> None:
     monkeypatch.setattr(
-        "nocfo_toolkit.mcp.server.get_http_headers",
+        "nocfo_toolkit.mcp.auth.get_http_headers",
         lambda include=None: {"x-nocfo-client": "custom-agent/1.0"},
     )
     request = httpx.Request("GET", "https://api.example.com/v1/business/")

@@ -23,7 +23,12 @@ from starlette.datastructures import MutableHeaders
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from nocfo_toolkit.config import AUTH_HEADER_SCHEME, ToolkitConfig
+from nocfo_toolkit.config import (
+    AUTH_HEADER_SCHEME,
+    NOCFO_CLIENT_DEFAULT,
+    NOCFO_CLIENT_HEADER,
+    ToolkitConfig,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,9 +52,19 @@ def _split_csv(raw: str | None) -> list[str]:
 
 
 def _incoming_mcp_client() -> str | None:
-    headers = get_http_headers(include={"x-nocfo-client"})
-    nocfo_client = (headers.get("x-nocfo-client") or "").strip()
+    headers = get_http_headers(include={NOCFO_CLIENT_HEADER})
+    nocfo_client = (headers.get(NOCFO_CLIENT_HEADER) or "").strip()
     return nocfo_client or None
+
+
+def resolve_nocfo_client(*, default_client: str | None = None) -> str:
+    """Resolve x-nocfo-client from incoming MCP request or configured default."""
+    incoming_client = _incoming_mcp_client()
+    if incoming_client:
+        return incoming_client
+    if default_client:
+        return default_client
+    return NOCFO_CLIENT_DEFAULT
 
 
 @dataclass(frozen=True)
@@ -265,11 +280,13 @@ class JwtExchangeAuth(httpx.Auth):
         *,
         exchange_path: str = "/auth/jwt/",
         refresh_skew_seconds: int = 60,
+        default_client: str | None = None,
     ) -> None:
         self._exchange_path = (
             exchange_path if exchange_path.startswith("/") else f"/{exchange_path}"
         )
         self._refresh_skew_seconds = max(0, refresh_skew_seconds)
+        self._default_client = default_client
         self._cache: dict[str, tuple[str, int | None]] = {}
         self._locks: dict[str, asyncio.Lock] = {}
 
@@ -312,7 +329,7 @@ class JwtExchangeAuth(httpx.Auth):
         bearer_token = access.token if access else None
         if not bearer_token:
             raise RuntimeError("Missing OAuth bearer token for MCP request.")
-        incoming_nocfo_client = _incoming_mcp_client()
+        nocfo_client = resolve_nocfo_client(default_client=self._default_client)
 
         claims = access.claims if access and isinstance(access.claims, dict) else {}
         cache_key = self._cache_key(bearer_token, claims)
@@ -332,11 +349,7 @@ class JwtExchangeAuth(httpx.Auth):
                             "Authorization": f"Bearer {bearer_token}",
                             "Content-Type": "application/json",
                             "Accept": "application/json",
-                            **(
-                                {"x-nocfo-client": incoming_nocfo_client}
-                                if incoming_nocfo_client
-                                else {}
-                            ),
+                            NOCFO_CLIENT_HEADER: nocfo_client,
                         },
                         content=b"{}",
                     )
@@ -382,23 +395,25 @@ class JwtExchangeAuth(httpx.Auth):
                     self._cache[cache_key] = (jwt_token, self._decode_exp(jwt_token))
 
         request.headers["Authorization"] = f"{AUTH_HEADER_SCHEME} {jwt_token}"
-        if incoming_nocfo_client:
-            request.headers["x-nocfo-client"] = incoming_nocfo_client
+        request.headers[NOCFO_CLIENT_HEADER] = nocfo_client
         yield request
 
 
 class PassthroughAuth(httpx.Auth):
     """Forward incoming HTTP Authorization header to downstream API requests."""
 
+    def __init__(self, *, default_client: str | None = None) -> None:
+        self._default_client = default_client
+
     async def async_auth_flow(self, request: httpx.Request):
-        headers = get_http_headers(include={"authorization", "x-nocfo-client"})
+        headers = get_http_headers(include={"authorization", NOCFO_CLIENT_HEADER})
         authorization = headers.get("authorization")
         if not authorization:
             raise RuntimeError("Missing Authorization header for MCP passthrough mode.")
         request.headers["Authorization"] = authorization
-        nocfo_client = (headers.get("x-nocfo-client") or "").strip()
-        if nocfo_client:
-            request.headers["x-nocfo-client"] = nocfo_client
+        request.headers[NOCFO_CLIENT_HEADER] = resolve_nocfo_client(
+            default_client=self._default_client
+        )
         yield request
 
 
