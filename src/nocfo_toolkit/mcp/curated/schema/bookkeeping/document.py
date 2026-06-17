@@ -20,8 +20,8 @@ from nocfo_toolkit.mcp.curated.schema.common import (
 
 
 class DocumentNumberInput(BusinessContextInput):
-    document_number: str = Field(
-        description="Bookkeeping document number visible to the user."
+    tool_handle: str = Field(
+        description="Value copied from bookkeeping_documents_list.items[].tool_handle or bookkeeping_document_retrieve.tool_handle. Pass it unchanged to bookkeeping tools that mutate a specific document."
     )
 
 
@@ -294,6 +294,35 @@ class DocumentSummary(AgentModel):
             data.setdefault("tag_count", len(data["tag_ids"]))
         if isinstance(data.get("relations"), list):
             data.setdefault("relation_count", len(data["relations"]))
+        return data
+
+    @model_validator(mode="before")
+    @classmethod
+    def enrich_suggestion_info(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        data = dict(value)
+        suggestion_info = data.get("suggestion_info")
+        raw_id = data.get("id")
+        if not isinstance(suggestion_info, dict) or not isinstance(raw_id, int):
+            return data
+        suggestion_info = dict(suggestion_info)
+        active_suggestion = suggestion_info.get("active_suggestion")
+        if isinstance(active_suggestion, dict):
+            active_suggestion = dict(active_suggestion)
+            active_suggestion.setdefault(
+                "source_document_handle", tool_handle("bookkeeping_document", raw_id)
+            )
+            suggestion_id = active_suggestion.get("id")
+            if isinstance(suggestion_id, int):
+                active_suggestion.setdefault(
+                    "suggestion_handle",
+                    tool_handle(
+                        "bookkeeping_document_active_suggestion", suggestion_id
+                    ),
+                )
+            suggestion_info["active_suggestion"] = active_suggestion
+        data["suggestion_info"] = suggestion_info
         return data
 
 
