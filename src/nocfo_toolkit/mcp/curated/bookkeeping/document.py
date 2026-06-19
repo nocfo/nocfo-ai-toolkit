@@ -22,6 +22,8 @@ from nocfo_toolkit.mcp.curated.schemas import (
     AgentDocumentBlueprintPayload,
     AgentBlueprintEntryPayload,
     DocumentMutationInput,
+    DocumentActiveSuggestionDetail,
+    DocumentActiveSuggestionRetrieveInput,
     DocumentMutationPayload,
     DocumentNumberMutationInput,
     ListEnvelope,
@@ -156,16 +158,20 @@ async def bookkeeping_document_create(
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Update a document blueprint or metadata by document_number. This recalculates generated entries. If payload contains tag_names, those tags must already exist; create missing tags first with bookkeeping_tag_create.",
+    description="Update a document blueprint or metadata by tool_handle. This recalculates generated entries. If payload contains tag_names, those tags must already exist; create missing tags first with bookkeeping_tag_create.",
 )
 async def bookkeeping_document_update(
     params: DocumentNumberMutationInput,
 ) -> dict[str, Any]:
     args = params
     slug = await business_slug(args.business)
-    document = await document_by_number(slug, args.document_number)
+    document_id = decode_tool_handle(
+        args.tool_handle,
+        expected_resource="bookkeeping_document",
+    )
+    document = await document_by_id(slug, document_id)
     body = await resolve_document_payload(slug, args.payload, is_patch=True)
-    path = f"/v1/business/{slug}/document/{document['id']}/"
+    path = f"/v1/business/{slug}/document/{document_id}/"
     updated = await get_client().request(
         "PATCH",
         path,
@@ -191,21 +197,25 @@ async def bookkeeping_document_update(
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Delete a bookkeeping document selected by document_number.",
+    description="Delete a bookkeeping document selected by tool_handle.",
 )
 async def bookkeeping_document_delete(
     params: DocumentNumberInput,
 ) -> dict[str, Any]:
     args = params
     slug = await business_slug(args.business)
-    document = await document_by_number(slug, args.document_number)
-    path = f"/v1/business/{slug}/document/{document['id']}/"
+    document_id = decode_tool_handle(
+        args.tool_handle,
+        expected_resource="bookkeeping_document",
+    )
+    document = await document_by_id(slug, document_id)
+    path = f"/v1/business/{slug}/document/{document_id}/"
     await get_client().request(
         "DELETE",
         path,
         business_slug=slug,
     )
-    return dump_model(DeletedResponse(document_number=args.document_number))
+    return dump_model(DeletedResponse(document_number=document.get("number")))
 
 
 @tool(
@@ -224,15 +234,55 @@ async def bookkeeping_entries_list(
 ) -> dict[str, Any]:
     args = params
     slug = await business_slug(args.business)
-    document = await document_by_number(slug, args.document_number)
+    document_id = decode_tool_handle(
+        args.tool_handle,
+        expected_resource="bookkeeping_document",
+    )
     result = await get_client().list_page(
-        f"/v1/business/{slug}/document/{document['id']}/entry/",
+        f"/v1/business/{slug}/document/{document_id}/entry/",
         cursor=args.cursor,
         limit=args.limit,
         business_slug=slug,
         item_model=EntrySummary,
     )
     return result
+
+
+@tool(
+    name="bookkeeping_document_active_suggestion_retrieve",
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
+    description="Retrieve the full active accounting suggestion for a draft bookkeeping document. This payload is only a non-final hint and is not posted accounting.",
+)
+async def bookkeeping_document_active_suggestion_retrieve(
+    params: DocumentActiveSuggestionRetrieveInput,
+) -> dict[str, Any]:
+    args = params
+    slug = await business_slug(args.business)
+    document_id = decode_tool_handle(
+        args.tool_handle,
+        expected_resource="bookkeeping_document",
+    )
+    source_document = await document_by_id(slug, document_id)
+    suggestion = await active_suggestion_for_document(slug, document_id)
+    return dump_model_from_backend(
+        DocumentActiveSuggestionDetail,
+        build_document_active_suggestion_detail(
+            {
+                "source_document": {
+                    "id": source_document.get("id"),
+                    "number": source_document.get("number"),
+                    "is_draft": source_document.get("is_draft"),
+                    "description": source_document.get("description"),
+                },
+                "suggestion": suggestion,
+            }
+        ),
+    )
 
 
 @tool(
@@ -243,16 +293,19 @@ async def bookkeeping_entries_list(
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Apply the active accounting suggestion for a draft document and finalize it.",
+    description="Apply the active accounting suggestion for a draft document selected by tool_handle and finalize it.",
 )
 async def bookkeeping_document_finalize_active_suggestion(
     params: DocumentNumberInput,
 ) -> dict[str, Any]:
     args = params
     slug = await business_slug(args.business)
-    document = await document_by_number(slug, args.document_number)
+    document_id = decode_tool_handle(
+        args.tool_handle,
+        expected_resource="bookkeeping_document",
+    )
     path = (
-        f"/v1/mcp/business/{slug}/documents/{document['id']}/"
+        f"/v1/mcp/business/{slug}/documents/{document_id}/"
         "actions/finalize_active_suggestion/"
     )
     result = await get_client().request(
@@ -261,7 +314,10 @@ async def bookkeeping_document_finalize_active_suggestion(
         json_body={},
         business_slug=slug,
     )
-    return dump_model_from_backend(DocumentSummary, result)
+    return dump_model_from_backend(
+        DocumentSummary,
+        build_document_finalize_summary(result),
+    )
 
 
 @tool(
@@ -272,15 +328,19 @@ async def bookkeeping_document_finalize_active_suggestion(
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Run a state action on a document: lock, unlock, flag, or unflag.",
+    description="Run a state action on a document selected by tool_handle: lock, unlock, flag, or unflag.",
 )
 async def bookkeeping_document_action(
     params: DocumentActionInput,
 ) -> dict[str, Any]:
     args = params
     slug = await business_slug(args.business)
-    document = await document_by_number(slug, args.document_number)
-    path = f"/v1/business/{slug}/document/{document['id']}/action/{args.action.value}/"
+    document_id = decode_tool_handle(
+        args.tool_handle,
+        expected_resource="bookkeeping_document",
+    )
+    document = await document_by_id(slug, document_id)
+    path = f"/v1/business/{slug}/document/{document_id}/action/{args.action.value}/"
     result = await get_client().request(
         "POST",
         path,
@@ -332,6 +392,96 @@ async def entries_for_document(slug: str, document_id: int) -> list[dict[str, An
         business_slug=slug,
     )
     return items(payload)
+
+
+async def active_suggestion_for_document(slug: str, document_id: int) -> dict[str, Any]:
+    payload = await get_client().request(
+        "GET",
+        f"/v1/business/{slug}/accounting_suggestions/",
+        params={"document": document_id, "page_size": 100},
+        business_slug=slug,
+    )
+    suggestions = items(payload)
+    if not suggestions:
+        raise_tool_error(
+            "precondition_failed",
+            "No active suggestion exists for the selected draft document.",
+            "Choose another draft document or update the document directly.",
+            status_code=412,
+        )
+    return suggestions[0]
+
+
+def build_document_active_suggestion_detail(
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    suggestion = payload.get("suggestion")
+    if not isinstance(suggestion, dict):
+        return payload
+
+    enriched = dict(payload)
+    enriched["suggestion"] = {
+        **suggestion,
+        "contact_id": suggestion.get("contact_id", suggestion.get("contact")),
+        "state": suggestion.get("state", "active"),
+        "is_final": False,
+        "is_posted": False,
+        "detail_tool_name": "bookkeeping_document_active_suggestion_retrieve",
+    }
+    enriched["warning"] = {
+        "status": "non_final_suggestion",
+        "is_final": False,
+        "is_posted": False,
+        "should_affect_reporting": False,
+        "message": (
+            "This is only an accounting suggestion based on transaction, receipt, "
+            "or import evidence. It has not been added to final accounting yet."
+        ),
+        "usage_guidance": (
+            "Use this suggestion only as a hint for possible expenses or "
+            "bookkeeping. Do not treat it as posted accounting unless it is "
+            "explicitly finalized."
+        ),
+    }
+    enriched["available_actions"] = [
+        {
+            "id": "finalize_active_suggestion",
+            "tool_name": "bookkeeping_document_finalize_active_suggestion",
+            "description": "Apply this active suggestion and finalize the draft document.",
+            "recommended": True,
+        }
+    ]
+    return enriched
+
+
+def build_document_finalize_summary(payload: dict[str, Any]) -> dict[str, Any]:
+    result = dict(payload)
+    result["workflow"] = {
+        "workflow_status": "finalized",
+        "preferred_action": "edit_document",
+        "document_editable": not bool(payload.get("is_locked")),
+    }
+    result["suggestion_info"] = {
+        "has_active_suggestion": False,
+        "active_suggestion": None,
+        "handling": {
+            "status": "none",
+            "recommended_action": "edit_document",
+            "instructions": (
+                "No active accounting suggestion exists for this document. "
+                "Update the document directly when changes are needed."
+            ),
+        },
+    }
+    result["available_actions"] = [
+        {
+            "id": "edit_document",
+            "tool_name": "bookkeeping_document_update",
+            "description": "Update the document directly.",
+            "recommended": True,
+        }
+    ]
+    return result
 
 
 async def resolve_document_payload(

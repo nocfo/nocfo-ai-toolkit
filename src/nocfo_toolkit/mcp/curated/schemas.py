@@ -7,6 +7,7 @@
 from nocfo_toolkit.mcp.curated.schema.common import *  # noqa: F403
 from nocfo_toolkit.mcp.curated.schema.bookkeeping.account import *  # noqa: F403
 from nocfo_toolkit.mcp.curated.schema.bookkeeping.document import *  # noqa: F403
+from nocfo_toolkit.mcp.curated.schema.bookkeeping.document_suggestion import *  # noqa: F403
 from nocfo_toolkit.mcp.curated.schema.bookkeeping.header import *  # noqa: F403
 from nocfo_toolkit.mcp.curated.schema.bookkeeping.tag_file import *  # noqa: F403
 from nocfo_toolkit.mcp.curated.schema.constants.docs import *  # noqa: F403

@@ -15,8 +15,11 @@ from nocfo_toolkit.mcp.curated.schemas import (
     AccountListItem,
     AccountSummary,
     ContactListItem,
+    DocumentActiveSuggestionDetail,
+    DocumentActiveSuggestionRetrieveInput,
     DocumentDetail,
     DocumentListItem,
+    DocumentNumberInput,
     DocumentSummary,
     EntrySummary,
     ProductSummary,
@@ -26,7 +29,7 @@ from nocfo_toolkit.mcp.curated.schemas import (
     SalesInvoiceListItem,
     SalesInvoiceSummary,
 )
-from nocfo_toolkit.mcp.curated.utils import decode_tool_handle
+from nocfo_toolkit.mcp.curated.utils import decode_tool_handle, encode_tool_handle
 from nocfo_toolkit.mcp.server import (
     MCP_CLIENT_HEADER,
     MCP_DEFAULT_CLIENT,
@@ -38,6 +41,12 @@ from nocfo_toolkit.mcp.server import (
     create_server,
     MCPServerOptions,
     run_http_server,
+)
+from nocfo_toolkit.mcp.curated.bookkeeping.document import (
+    build_document_active_suggestion_detail,
+    build_document_finalize_summary,
+    bookkeeping_document_active_suggestion_retrieve,
+    bookkeeping_document_finalize_active_suggestion,
 )
 
 
@@ -166,6 +175,7 @@ def test_create_server_registers_curated_tool_surface() -> None:
     assert "bookkeeping_accounts_list" in names
     assert "bookkeeping_accounts_search" not in names
     assert "bookkeeping_document_create" in names
+    assert "bookkeeping_document_active_suggestion_retrieve" in names
     assert "bookkeeping_documents_search" not in names
     assert "bookkeeping_entries_list" in names
     assert "bookkeeping_document_relation_update" not in names
@@ -223,6 +233,20 @@ def test_curated_tools_use_pydantic_params_argument() -> None:
     assert "blueprint" in payload_schema["required"]
     assert "tag_ids" not in payload_schema.get("required", [])
 
+    suggestion_retrieve_schema = by_name[
+        "bookkeeping_document_active_suggestion_retrieve"
+    ].parameters
+    suggestion_fields = suggestion_retrieve_schema["$defs"][
+        "DocumentActiveSuggestionRetrieveInput"
+    ]["properties"]
+    assert list(suggestion_fields) == ["business", "tool_handle"]
+
+    finalize_schema = by_name[
+        "bookkeeping_document_finalize_active_suggestion"
+    ].parameters
+    finalize_fields = finalize_schema["$defs"]["DocumentNumberInput"]["properties"]
+    assert list(finalize_fields) == ["business", "tool_handle"]
+
 
 def test_number_lookup_resources_do_not_expose_internal_ids() -> None:
     for model in (
@@ -255,6 +279,11 @@ def test_number_lookup_resources_do_not_expose_internal_ids() -> None:
     for tool_name, schema_name, forbidden in (
         ("bookkeeping_account_retrieve", "AccountRetrieveInput", "account_id"),
         ("bookkeeping_document_retrieve", "DocumentRetrieveInput", "document_id"),
+        (
+            "bookkeeping_document_finalize_active_suggestion",
+            "DocumentNumberInput",
+            "document_number",
+        ),
         ("invoicing_sales_invoice_retrieve", "InvoiceRetrieveInput", "invoice_id"),
         ("invoicing_purchase_invoice_retrieve", "InvoiceRetrieveInput", "invoice_id"),
     ):
@@ -920,3 +949,233 @@ def test_run_http_server_forwards_stateless_http(monkeypatch) -> None:
     assert captured_kwargs["port"] == 9000
     assert captured_kwargs["path"] == "/mcp"
     assert captured_kwargs["stateless_http"] is True
+
+
+def test_document_summary_enriches_suggestion_handles() -> None:
+    document = DocumentSummary.model_validate(
+        {
+            "id": 42,
+            "number": "BK-42",
+            "suggestion_info": {
+                "has_active_suggestion": True,
+                "active_suggestion": {
+                    "id": 77,
+                    "description": "Possible expense",
+                    "state": "active",
+                    "is_final": False,
+                    "is_posted": False,
+                    "detail_tool_name": "bookkeeping_document_active_suggestion_retrieve",
+                },
+            },
+        }
+    )
+
+    active = document.suggestion_info["active_suggestion"]
+    assert (
+        decode_tool_handle(
+            active["source_document_handle"], expected_resource="bookkeeping_document"
+        )
+        == 42
+    )
+    assert (
+        decode_tool_handle(
+            active["suggestion_handle"],
+            expected_resource="bookkeeping_document_active_suggestion",
+        )
+        == 77
+    )
+
+
+def test_active_suggestion_detail_attaches_document_number_to_actions() -> None:
+    detail = DocumentActiveSuggestionDetail.model_validate(
+        {
+            "suggestion": {
+                "id": 77,
+                "state": "active",
+                "is_final": False,
+                "is_posted": False,
+            },
+            "source_document": {"id": 42, "number": "BK-42", "is_draft": True},
+            "warning": {
+                "status": "non_final_suggestion",
+                "is_final": False,
+                "is_posted": False,
+                "should_affect_reporting": False,
+                "message": "Suggestion only",
+            },
+            "available_actions": [
+                {
+                    "id": "finalize_active_suggestion",
+                    "tool_name": "bookkeeping_document_finalize_active_suggestion",
+                    "description": "Finalize it",
+                    "recommended": True,
+                }
+            ],
+        }
+    )
+
+    assert detail.available_actions is not None
+    assert detail.available_actions[0].document_number == "BK-42"
+
+
+def test_active_suggestion_retrieve_uses_existing_backend_apis(monkeypatch) -> None:
+    captured: list[tuple[str, str, dict[str, object]]] = []
+
+    class StubClient:
+        async def request(self, method: str, path: str, **kwargs):
+            captured.append((method, path, kwargs))
+            if path == "/v1/business/demo/document/42/":
+                return {
+                    "id": 42,
+                    "number": "BK-42",
+                    "is_draft": True,
+                    "description": "Draft",
+                }
+            if path == "/v1/business/demo/accounting_suggestions/":
+                return {
+                    "results": [
+                        {
+                            "id": 77,
+                            "contact": 15,
+                            "description": "Possible expense",
+                            "blueprint": {},
+                            "ui_rows": [],
+                        }
+                    ]
+                }
+            raise AssertionError(f"Unexpected path: {path}")
+
+    async def stub_business_slug(_: str) -> str:
+        return "demo"
+
+    monkeypatch.setattr(
+        "nocfo_toolkit.mcp.curated.bookkeeping.document.business_slug",
+        stub_business_slug,
+    )
+    monkeypatch.setattr(
+        "nocfo_toolkit.mcp.curated.bookkeeping.document.get_client",
+        lambda: StubClient(),
+    )
+
+    result = asyncio.run(
+        bookkeeping_document_active_suggestion_retrieve(
+            DocumentActiveSuggestionRetrieveInput(
+                business="demo",
+                tool_handle=encode_tool_handle("bookkeeping_document", 42),
+            )
+        )
+    )
+
+    assert captured == [
+        ("GET", "/v1/business/demo/document/42/", {"business_slug": "demo"}),
+        (
+            "GET",
+            "/v1/business/demo/accounting_suggestions/",
+            {
+                "params": {"document": 42, "page_size": 100},
+                "business_slug": "demo",
+            },
+        ),
+    ]
+    assert result["suggestion"]["detail_tool_name"] == (
+        "bookkeeping_document_active_suggestion_retrieve"
+    )
+    assert result["suggestion"]["contact_id"] == 15
+
+
+def test_finalize_active_suggestion_uses_existing_mcp_finalize(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class StubClient:
+        async def request(self, method: str, path: str, **kwargs):
+            captured["method"] = method
+            captured["path"] = path
+            captured["kwargs"] = kwargs
+            return {"id": 42, "number": "BK-42", "is_draft": False, "is_locked": False}
+
+    async def stub_business_slug(_: str) -> str:
+        return "demo"
+
+    monkeypatch.setattr(
+        "nocfo_toolkit.mcp.curated.bookkeeping.document.business_slug",
+        stub_business_slug,
+    )
+    monkeypatch.setattr(
+        "nocfo_toolkit.mcp.curated.bookkeeping.document.get_client",
+        lambda: StubClient(),
+    )
+
+    result = asyncio.run(
+        bookkeeping_document_finalize_active_suggestion(
+            DocumentNumberInput(
+                business="demo",
+                tool_handle=encode_tool_handle("bookkeeping_document", 42),
+            )
+        )
+    )
+
+    assert captured["method"] == "POST"
+    assert (
+        captured["path"]
+        == "/v1/mcp/business/demo/documents/42/actions/finalize_active_suggestion/"
+    )
+    assert result["workflow"]["workflow_status"] == "finalized"
+
+
+def test_build_document_active_suggestion_detail_enriches_normal_api_payload() -> None:
+    payload = build_document_active_suggestion_detail(
+        {
+            "source_document": {
+                "id": 42,
+                "number": "BK-42",
+                "is_draft": True,
+                "description": "Draft",
+            },
+            "suggestion": {
+                "id": 77,
+                "key": "ai-suggestion",
+                "description": "Possible expense",
+                "blueprint": {},
+                "ui_rows": [],
+            },
+        }
+    )
+
+    detail = DocumentActiveSuggestionDetail.model_validate(payload)
+    assert detail.suggestion is not None
+    assert detail.suggestion.state == "active"
+    assert detail.suggestion.is_final is False
+    assert detail.suggestion.is_posted is False
+    assert detail.suggestion.detail_tool_name == (
+        "bookkeeping_document_active_suggestion_retrieve"
+    )
+    assert detail.warning is not None
+    assert detail.warning.should_affect_reporting is False
+    assert detail.available_actions is not None
+    assert detail.available_actions[0].tool_name == (
+        "bookkeeping_document_finalize_active_suggestion"
+    )
+
+
+def test_build_document_finalize_summary_restores_mcp_workflow_shape() -> None:
+    summary = DocumentSummary.model_validate(
+        build_document_finalize_summary(
+            {
+                "id": 42,
+                "number": "BK-42",
+                "is_draft": False,
+                "is_locked": False,
+                "description": "Finalized",
+                "attachment_ids": [],
+                "tag_ids": [],
+                "relations": [],
+            }
+        )
+    )
+
+    assert summary.workflow is not None
+    assert summary.workflow["workflow_status"] == "finalized"
+    assert summary.suggestion_info is not None
+    assert summary.suggestion_info["has_active_suggestion"] is False
+    assert summary.available_actions is not None
+    assert summary.available_actions[0]["tool_name"] == "bookkeeping_document_update"
