@@ -5,18 +5,20 @@ import base64
 from unittest.mock import patch
 
 from nocfo_toolkit.mcp.curated.bookkeeping.tag_file import bookkeeping_file_upload
-from nocfo_toolkit.mcp.curated.schema.bookkeeping.tag_file import FileUploadInput
+from nocfo_toolkit.mcp.curated.schema.bookkeeping.tag_file import (
+    FileUploadSpec,
+    FileUploadsInput,
+)
 
 
-def test_file_upload_input_accepts_legacy_name_alias() -> None:
-    params = FileUploadInput.model_validate(
+def test_file_upload_spec_accepts_legacy_name_alias() -> None:
+    spec = FileUploadSpec.model_validate(
         {
-            "business": "demo",
             "name": "legacy-name.txt",
             "file_base64": base64.b64encode(b"payload").decode("ascii"),
         }
     )
-    assert params.filename == "legacy-name.txt"
+    assert spec.filename == "legacy-name.txt"
 
 
 def test_bookkeeping_file_upload_sends_required_name_form_field() -> None:
@@ -38,12 +40,16 @@ def test_bookkeeping_file_upload_sends_required_name_form_field() -> None:
             return {"id": 1, "name": "legacy-name.txt", "file_name": "legacy-name.txt"}
 
     async def _run() -> None:
-        params = FileUploadInput.model_validate(
+        params = FileUploadsInput.model_validate(
             {
                 "business": "demo",
-                "filename": "legacy-name.txt",
-                "content_type": "text/plain",
-                "file_base64": base64.b64encode(b"payload").decode("ascii"),
+                "files": [
+                    {
+                        "filename": "legacy-name.txt",
+                        "content_type": "text/plain",
+                        "file_base64": base64.b64encode(b"payload").decode("ascii"),
+                    }
+                ],
             }
         )
         with (
@@ -57,7 +63,7 @@ def test_bookkeeping_file_upload_sends_required_name_form_field() -> None:
             ),
         ):
             result = await bookkeeping_file_upload(params)
-        assert result["name"] == "legacy-name.txt"
+        assert result["results"][0]["result"]["name"] == "legacy-name.txt"
 
     asyncio.run(_run())
     assert captured["path"] == "/v1/business/demo/file_upload/"

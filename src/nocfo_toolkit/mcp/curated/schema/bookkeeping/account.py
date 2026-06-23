@@ -6,6 +6,7 @@ from typing import Any
 
 from pydantic import AliasChoices, Field, model_validator
 
+from nocfo_toolkit.mcp.curated.schema.batch import AccountNumbersInput
 from nocfo_toolkit.mcp.curated.schema.common import (
     AccountType,
     AccountAction,
@@ -55,21 +56,9 @@ class AccountListInput(BusinessPaginationInput):
         return {key: value for key, value in params.items() if value is not None}
 
 
-class AccountNumberInput(BusinessContextInput):
-    account_number: int = Field(
-        description="User-facing bookkeeping account number, e.g. 1910."
-    )
-
-
-class AccountPayloadInput(AccountNumberInput):
-    payload: dict[str, Any] = Field(
-        description="Fields to create or update. Prefer user-facing values such as account_number, document_number, invoice_number, tag_names, or contact names when supported."
-    )
-
-
-class AccountActionInput(AccountNumberInput):
+class AccountNumbersActionInput(AccountNumbersInput):
     action: enum_or_str(AccountAction) = Field(
-        description="Action to run on the selected resource."
+        description="Action (show/hide) to run on every selected account."
     )
 
 

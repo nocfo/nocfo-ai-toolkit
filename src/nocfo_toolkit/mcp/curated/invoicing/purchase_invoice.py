@@ -6,12 +6,14 @@ from typing import Any
 
 from fastmcp.tools import tool
 from fastmcp.tools.tool import ToolAnnotations
+from nocfo_toolkit.mcp.curated.batch import run_batch
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.schemas import (
+    BatchResponse,
     DeletedResponse,
-    InvoiceLookupInput,
+    InvoiceNumbersInput,
+    InvoiceNumbersPayloadInput,
     InvoiceRetrieveInput,
-    InvoicePayloadInput,
     ListEnvelope,
     PurchaseInvoiceListItem,
     PurchaseInvoicesListInput,
@@ -91,28 +93,34 @@ async def invoicing_purchase_invoice_retrieve(
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description=("Update one purchase invoice by user-facing invoice_number."),
+    description=(
+        "Update one or more purchase invoices selected by invoice_numbers; the same payload "
+        "is applied to every invoice. Batch all targets into one call."
+    ),
+    output_schema=BatchResponse.model_json_schema(),
 )
 async def invoicing_purchase_invoice_update(
-    params: InvoicePayloadInput,
+    params: InvoiceNumbersPayloadInput,
 ) -> dict[str, Any]:
-    args = params
-    slug = await business_slug(args.business)
-    purchase_invoice_id = await get_client().resolve_id(
-        f"/v1/invoicing/{slug}/purchase_invoice/",
-        lookup_field="invoice_number",
-        lookup_value=args.invoice_number,
-        search_param="search",
-        business_slug=slug,
-    )
-    path = f"/v1/invoicing/{slug}/purchase_invoice/{purchase_invoice_id}/"
-    result = await get_client().request(
-        "PATCH",
-        path,
-        json_body=args.payload,
-        business_slug=slug,
-    )
-    return dump_model_from_backend(PurchaseInvoiceSummary, result)
+    slug = await business_slug(params.business)
+
+    async def _update(invoice_number: int | str) -> dict[str, Any]:
+        purchase_invoice_id = await get_client().resolve_id(
+            f"/v1/invoicing/{slug}/purchase_invoice/",
+            lookup_field="invoice_number",
+            lookup_value=invoice_number,
+            search_param="search",
+            business_slug=slug,
+        )
+        result = await get_client().request(
+            "PATCH",
+            f"/v1/invoicing/{slug}/purchase_invoice/{purchase_invoice_id}/",
+            json_body=params.payload,
+            business_slug=slug,
+        )
+        return dump_model_from_backend(PurchaseInvoiceSummary, result)
+
+    return await run_batch(params.invoice_numbers, _update)
 
 
 @tool(
@@ -123,24 +131,30 @@ async def invoicing_purchase_invoice_update(
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description=("Delete one purchase invoice by user-facing invoice_number."),
+    description=(
+        "Delete one or more purchase invoices in a single call — pass every target in invoice_numbers. "
+        "Prefer one batched call over repeated single-target calls (each call needs its own confirmation)."
+    ),
+    output_schema=BatchResponse.model_json_schema(),
 )
 async def invoicing_purchase_invoice_delete(
-    params: InvoiceLookupInput,
+    params: InvoiceNumbersInput,
 ) -> dict[str, Any]:
-    args = params
-    slug = await business_slug(args.business)
-    purchase_invoice_id = await get_client().resolve_id(
-        f"/v1/invoicing/{slug}/purchase_invoice/",
-        lookup_field="invoice_number",
-        lookup_value=args.invoice_number,
-        search_param="search",
-        business_slug=slug,
-    )
-    path = f"/v1/invoicing/{slug}/purchase_invoice/{purchase_invoice_id}/"
-    await get_client().request(
-        "DELETE",
-        path,
-        business_slug=slug,
-    )
-    return dump_model(DeletedResponse(invoice_number=args.invoice_number))
+    slug = await business_slug(params.business)
+
+    async def _delete(invoice_number: int | str) -> dict[str, Any]:
+        purchase_invoice_id = await get_client().resolve_id(
+            f"/v1/invoicing/{slug}/purchase_invoice/",
+            lookup_field="invoice_number",
+            lookup_value=invoice_number,
+            search_param="search",
+            business_slug=slug,
+        )
+        await get_client().request(
+            "DELETE",
+            f"/v1/invoicing/{slug}/purchase_invoice/{purchase_invoice_id}/",
+            business_slug=slug,
+        )
+        return dump_model(DeletedResponse(invoice_number=invoice_number))
+
+    return await run_batch(params.invoice_numbers, _delete)

@@ -6,21 +6,24 @@ from typing import Any
 
 from fastmcp.tools import tool
 from fastmcp.tools.tool import ToolAnnotations
+from nocfo_toolkit.mcp.curated.batch import run_batch
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.errors import raise_tool_error
 from nocfo_toolkit.mcp.curated.schemas import (
+    BatchResponse,
     DeletedResponse,
     InvoiceRetrieveInput,
     ListEnvelope,
+    PayloadsInput,
     SalesInvoiceAction,
-    SalesInvoiceActionInput,
     SalesInvoiceListItem,
     SalesInvoiceLookupInput,
     SalesInvoiceMutationPayload,
-    SalesInvoicePayloadInput,
+    SalesInvoiceTargetsActionInput,
+    SalesInvoiceTargetsInput,
+    SalesInvoiceTargetsPayloadInput,
     SalesInvoicesListInput,
     SalesInvoiceSummary,
-    PayloadInput,
     dump_model,
     dump_model_from_backend,
 )
@@ -88,20 +91,21 @@ async def invoicing_sales_invoice_retrieve(
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Create a sales invoice using invoice fields and rows from the user request.",
+    description="Create one or more sales invoices in a single call — pass each invoice (fields and rows) as an entry in payloads.",
+    output_schema=BatchResponse.model_json_schema(),
 )
-async def invoicing_sales_invoice_create(params: PayloadInput) -> dict[str, Any]:
-    args = params
-    slug = await business_slug(args.business)
-    body = await resolve_sales_invoice_payload(slug, args.payload)
+async def invoicing_sales_invoice_create(params: PayloadsInput) -> dict[str, Any]:
+    slug = await business_slug(params.business)
     path = f"/v1/invoicing/{slug}/invoice/"
-    result = await get_client().request(
-        "POST",
-        path,
-        json_body=body,
-        business_slug=slug,
-    )
-    return dump_model_from_backend(SalesInvoiceSummary, result)
+
+    async def _create(payload: dict[str, Any]) -> dict[str, Any]:
+        body = await resolve_sales_invoice_payload(slug, payload)
+        result = await get_client().request(
+            "POST", path, json_body=body, business_slug=slug
+        )
+        return dump_model_from_backend(SalesInvoiceSummary, result)
+
+    return await run_batch(params.payloads, _create, label=lambda _payload: None)
 
 
 @tool(
@@ -112,23 +116,27 @@ async def invoicing_sales_invoice_create(params: PayloadInput) -> dict[str, Any]
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Update a sales invoice by invoice_number or tool_handle.",
+    description="Update one or more sales invoices selected by invoice_numbers or tool_handles; the same payload is applied to every invoice. Batch all targets into one call.",
+    output_schema=BatchResponse.model_json_schema(),
 )
 async def invoicing_sales_invoice_update(
-    params: SalesInvoicePayloadInput,
+    params: SalesInvoiceTargetsPayloadInput,
 ) -> dict[str, Any]:
-    args = params
-    slug = await business_slug(args.business)
-    body = await resolve_sales_invoice_payload(slug, args.payload)
-    item_id = await _resolve_sales_invoice_id(slug, args)
-    path = f"/v1/invoicing/{slug}/invoice/{item_id}/"
-    result = await get_client().request(
-        "PATCH",
-        path,
-        json_body=body,
-        business_slug=slug,
-    )
-    return dump_model_from_backend(SalesInvoiceSummary, result)
+    slug = await business_slug(params.business)
+    body = await resolve_sales_invoice_payload(slug, params.payload)
+    targets, kind = _sales_invoice_targets(params)
+
+    async def _update(target: int | str) -> dict[str, Any]:
+        item_id = await _resolve_target(slug, target, kind)
+        result = await get_client().request(
+            "PATCH",
+            f"/v1/invoicing/{slug}/invoice/{item_id}/",
+            json_body=body,
+            business_slug=slug,
+        )
+        return dump_model_from_backend(SalesInvoiceSummary, result)
+
+    return await run_batch(targets, _update)
 
 
 @tool(
@@ -139,17 +147,24 @@ async def invoicing_sales_invoice_update(
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Delete a sales invoice by invoice_number or tool_handle.",
+    description="Delete one or more sales invoices in a single call — pass every target in invoice_numbers or tool_handles. Prefer one batched call over repeated single-target calls (each call needs its own confirmation).",
+    output_schema=BatchResponse.model_json_schema(),
 )
 async def invoicing_sales_invoice_delete(
-    params: SalesInvoiceLookupInput,
+    params: SalesInvoiceTargetsInput,
 ) -> dict[str, Any]:
-    args = params
-    slug = await business_slug(args.business)
-    item_id = await _resolve_sales_invoice_id(slug, args)
-    path = f"/v1/invoicing/{slug}/invoice/{item_id}/"
-    await get_client().request("DELETE", path, business_slug=slug)
-    return dump_model(DeletedResponse(invoice_number=args.invoice_number, id=item_id))
+    slug = await business_slug(params.business)
+    targets, kind = _sales_invoice_targets(params)
+
+    async def _delete(target: int | str) -> dict[str, Any]:
+        item_id = await _resolve_target(slug, target, kind)
+        await get_client().request(
+            "DELETE", f"/v1/invoicing/{slug}/invoice/{item_id}/", business_slug=slug
+        )
+        invoice_number = target if kind == "invoice_number" else None
+        return dump_model(DeletedResponse(invoice_number=invoice_number, id=item_id))
+
+    return await run_batch(targets, _delete)
 
 
 @tool(
@@ -160,14 +175,13 @@ async def invoicing_sales_invoice_delete(
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Run a sales invoice workflow action: accept, mark_paid, mark_unpaid, mark_credit_loss, or disable_recurrence.",
+    description="Run a workflow action (accept, mark_paid, mark_unpaid, mark_credit_loss, or disable_recurrence) on one or more sales invoices in a single call — pass every target in invoice_numbers or tool_handles; the same action applies to all.",
+    output_schema=BatchResponse.model_json_schema(),
 )
 async def invoicing_sales_invoice_action(
-    params: SalesInvoiceActionInput,
+    params: SalesInvoiceTargetsActionInput,
 ) -> dict[str, Any]:
-    args = params
-    slug = await business_slug(args.business)
-    item_id = await _resolve_sales_invoice_id(slug, args)
+    slug = await business_slug(params.business)
     path_by_action = {
         SalesInvoiceAction.accept: "accept",
         SalesInvoiceAction.mark_paid: "paid",
@@ -175,15 +189,19 @@ async def invoicing_sales_invoice_action(
         SalesInvoiceAction.mark_credit_loss: "credit_loss",
         SalesInvoiceAction.disable_recurrence: "disable_recurrence",
     }
-    path = (
-        f"/v1/invoicing/{slug}/invoice/{item_id}/actions/{path_by_action[args.action]}/"
-    )
-    result = await get_client().request(
-        "POST",
-        path,
-        business_slug=slug,
-    )
-    return dump_model_from_backend(SalesInvoiceSummary, result)
+    action_mapped = path_by_action[params.action]
+    targets, kind = _sales_invoice_targets(params)
+
+    async def _act(target: int | str) -> dict[str, Any]:
+        item_id = await _resolve_target(slug, target, kind)
+        result = await get_client().request(
+            "POST",
+            f"/v1/invoicing/{slug}/invoice/{item_id}/actions/{action_mapped}/",
+            business_slug=slug,
+        )
+        return dump_model_from_backend(SalesInvoiceSummary, result)
+
+    return await run_batch(targets, _act)
 
 
 @tool(
@@ -218,22 +236,26 @@ async def invoicing_sales_invoice_delivery_methods(
         idempotentHint=False,
         openWorldHint=True,
     ),
-    description="Send a sales invoice using a selected delivery method. Call only after the user explicitly confirms sending.",
+    description="Send one or more sales invoices using a selected delivery method — pass every target in invoice_numbers or tool_handles; the same payload (delivery method) is applied to all. Call only after the user explicitly confirms sending.",
+    output_schema=BatchResponse.model_json_schema(),
 )
 async def invoicing_sales_invoice_send(
-    params: SalesInvoicePayloadInput,
+    params: SalesInvoiceTargetsPayloadInput,
 ) -> dict[str, Any]:
-    args = params
-    slug = await business_slug(args.business)
-    item_id = await _resolve_sales_invoice_id(slug, args)
-    path = f"/v1/invoicing/{slug}/invoice/{item_id}/send/"
-    result = await get_client().request(
-        "POST",
-        path,
-        json_body=args.payload,
-        business_slug=slug,
-    )
-    return dump_model_from_backend(SalesInvoiceSummary, result)
+    slug = await business_slug(params.business)
+    targets, kind = _sales_invoice_targets(params)
+
+    async def _send(target: int | str) -> dict[str, Any]:
+        item_id = await _resolve_target(slug, target, kind)
+        result = await get_client().request(
+            "POST",
+            f"/v1/invoicing/{slug}/invoice/{item_id}/send/",
+            json_body=params.payload,
+            business_slug=slug,
+        )
+        return dump_model_from_backend(SalesInvoiceSummary, result)
+
+    return await run_batch(targets, _send)
 
 
 async def resolve_sales_invoice_payload(
@@ -319,5 +341,25 @@ async def _resolve_sales_invoice_id(slug: str, args: SalesInvoiceLookupInput) ->
         f"/v1/invoicing/{slug}/invoice/",
         lookup_field="invoice_number",
         lookup_value=args.invoice_number,
+        business_slug=slug,
+    )
+
+
+def _sales_invoice_targets(
+    params: SalesInvoiceTargetsInput,
+) -> tuple[list[Any], str]:
+    """Return (targets, kind) for the selector list the caller provided."""
+    if params.tool_handles:
+        return list(params.tool_handles), "tool_handle"
+    return list(params.invoice_numbers or []), "invoice_number"
+
+
+async def _resolve_target(slug: str, target: Any, kind: str) -> int:
+    if kind == "tool_handle":
+        return decode_tool_handle(target, expected_resource="invoicing_sales_invoice")
+    return await get_client().resolve_id(
+        f"/v1/invoicing/{slug}/invoice/",
+        lookup_field="invoice_number",
+        lookup_value=target,
         business_slug=slug,
     )

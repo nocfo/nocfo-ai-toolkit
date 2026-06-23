@@ -6,14 +6,17 @@ from typing import Any
 
 from fastmcp.tools import tool
 from fastmcp.tools.tool import ToolAnnotations
+from nocfo_toolkit.mcp.curated.batch import run_batch
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.schemas import (
+    BatchResponse,
     BusinessPaginationInput,
     DeletedResponse,
     IdentifierInput,
-    IdentifierPayloadInput,
+    IdentifiersInput,
+    IdentifiersPayloadInput,
     ListEnvelope,
-    PayloadInput,
+    PayloadsInput,
     ProductListItem,
     ProductSummary,
     dump_model,
@@ -94,19 +97,24 @@ async def invoicing_product_retrieve(params: IdentifierInput) -> dict[str, Any]:
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Create an invoicing product. Set is_vat_inclusive explicitly because it controls whether amount is VAT-inclusive or VAT-exclusive.",
+    description="Create one or more invoicing products in a single call — pass each product as an entry in payloads. Set is_vat_inclusive explicitly because it controls whether amount is VAT-inclusive or VAT-exclusive.",
+    output_schema=BatchResponse.model_json_schema(),
 )
-async def invoicing_product_create(params: PayloadInput) -> dict[str, Any]:
-    args = params
-    slug = await business_slug(args.business)
+async def invoicing_product_create(params: PayloadsInput) -> dict[str, Any]:
+    slug = await business_slug(params.business)
     path = f"/v1/invoicing/{slug}/product/"
-    result = await get_client().request(
-        "POST",
-        path,
-        json_body=args.payload,
-        business_slug=slug,
+
+    async def _create(payload: dict[str, Any]) -> dict[str, Any]:
+        result = await get_client().request(
+            "POST", path, json_body=payload, business_slug=slug
+        )
+        return dump_model_from_backend(ProductSummary, result)
+
+    return await run_batch(
+        params.payloads,
+        _create,
+        label=lambda payload: payload.get("code") or payload.get("name"),
     )
-    return dump_model_from_backend(ProductSummary, result)
 
 
 @tool(
@@ -117,32 +125,35 @@ async def invoicing_product_create(params: PayloadInput) -> dict[str, Any]:
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Update one invoicing product. Keep amount and is_vat_inclusive aligned (true=VAT-inclusive amount, false=VAT-exclusive amount). Prefer resolving by product code first.",
+    description="Update one or more invoicing products selected by identifiers; the same payload is applied to every product. Keep amount and is_vat_inclusive aligned (true=VAT-inclusive amount, false=VAT-exclusive amount). Prefer resolving by product code.",
+    output_schema=BatchResponse.model_json_schema(),
 )
 async def invoicing_product_update(
-    params: IdentifierPayloadInput,
+    params: IdentifiersPayloadInput,
 ) -> dict[str, Any]:
-    args = params
-    slug = await business_slug(args.business)
-    product_id = (
-        int(args.identifier)
-        if args.identifier.isdigit()
-        else await get_client().resolve_id(
-            f"/v1/invoicing/{slug}/product/",
-            lookup_field="code",
-            lookup_value=args.identifier,
-            search_param="search",
+    slug = await business_slug(params.business)
+
+    async def _update(identifier: str) -> dict[str, Any]:
+        product_id = (
+            int(identifier)
+            if identifier.isdigit()
+            else await get_client().resolve_id(
+                f"/v1/invoicing/{slug}/product/",
+                lookup_field="code",
+                lookup_value=identifier,
+                search_param="search",
+                business_slug=slug,
+            )
+        )
+        result = await get_client().request(
+            "PATCH",
+            f"/v1/invoicing/{slug}/product/{product_id}/",
+            json_body=params.payload,
             business_slug=slug,
         )
-    )
-    path = f"/v1/invoicing/{slug}/product/{product_id}/"
-    result = await get_client().request(
-        "PATCH",
-        path,
-        json_body=args.payload,
-        business_slug=slug,
-    )
-    return dump_model_from_backend(ProductSummary, result)
+        return dump_model_from_backend(ProductSummary, result)
+
+    return await run_batch(params.identifiers, _update)
 
 
 @tool(
@@ -153,26 +164,27 @@ async def invoicing_product_update(
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Delete one invoicing product. Prefer resolving it by product code first.",
+    description="Delete one or more invoicing products in a single call — pass every target in identifiers. Prefer resolving by product code. Prefer one batched call over repeated single-target calls (each call needs its own confirmation).",
+    output_schema=BatchResponse.model_json_schema(),
 )
-async def invoicing_product_delete(params: IdentifierInput) -> dict[str, Any]:
-    args = params
-    slug = await business_slug(args.business)
-    product_id = (
-        int(args.identifier)
-        if args.identifier.isdigit()
-        else await get_client().resolve_id(
-            f"/v1/invoicing/{slug}/product/",
-            lookup_field="code",
-            lookup_value=args.identifier,
-            search_param="search",
-            business_slug=slug,
+async def invoicing_product_delete(params: IdentifiersInput) -> dict[str, Any]:
+    slug = await business_slug(params.business)
+
+    async def _delete(identifier: str) -> dict[str, Any]:
+        product_id = (
+            int(identifier)
+            if identifier.isdigit()
+            else await get_client().resolve_id(
+                f"/v1/invoicing/{slug}/product/",
+                lookup_field="code",
+                lookup_value=identifier,
+                search_param="search",
+                business_slug=slug,
+            )
         )
-    )
-    path = f"/v1/invoicing/{slug}/product/{product_id}/"
-    await get_client().request(
-        "DELETE",
-        path,
-        business_slug=slug,
-    )
-    return dump_model(DeletedResponse(id=product_id))
+        await get_client().request(
+            "DELETE", f"/v1/invoicing/{slug}/product/{product_id}/", business_slug=slug
+        )
+        return dump_model(DeletedResponse(id=product_id))
+
+    return await run_batch(params.identifiers, _delete)

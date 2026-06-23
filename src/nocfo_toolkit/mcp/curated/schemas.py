@@ -5,6 +5,7 @@
 # Keep this as a thin aggregation layer over the split schema package.
 
 from nocfo_toolkit.mcp.curated.schema.common import *  # noqa: F403
+from nocfo_toolkit.mcp.curated.schema.batch import *  # noqa: F403
 from nocfo_toolkit.mcp.curated.schema.bookkeeping.account import *  # noqa: F403
 from nocfo_toolkit.mcp.curated.schema.bookkeeping.document import *  # noqa: F403
 from nocfo_toolkit.mcp.curated.schema.bookkeeping.document_suggestion import *  # noqa: F403
@@ -15,4 +16,5 @@ from nocfo_toolkit.mcp.curated.schema.invoicing.contact import *  # noqa: F403
 from nocfo_toolkit.mcp.curated.schema.invoicing.product import *  # noqa: F403
 from nocfo_toolkit.mcp.curated.schema.invoicing.purchase_invoice import *  # noqa: F403
 from nocfo_toolkit.mcp.curated.schema.invoicing.sales_invoice import *  # noqa: F403
+from nocfo_toolkit.mcp.curated.schema.invoicing.sales_invoice_batch import *  # noqa: F403
 from nocfo_toolkit.mcp.curated.schema.reporting.report import *  # noqa: F403

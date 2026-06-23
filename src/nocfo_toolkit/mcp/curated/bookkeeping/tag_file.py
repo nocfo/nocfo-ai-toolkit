@@ -9,24 +9,28 @@ from typing import Any
 from fastmcp.exceptions import ToolError
 from fastmcp.tools import tool
 from fastmcp.tools.tool import ToolAnnotations
+from nocfo_toolkit.mcp.curated.batch import run_batch
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
-from nocfo_toolkit.mcp.curated.bookkeeping.document import document_by_number
 from nocfo_toolkit.mcp.curated.errors import raise_tool_error
 from nocfo_toolkit.mcp.curated.schemas import (
+    BatchResponse,
     DeletedResponse,
     DocumentSummary,
+    DocumentTagsBatchInput,
     FileSummary,
-    FileUploadInput,
+    FileUploadSpec,
+    FileUploadsInput,
     IdInput,
-    IdPayloadInput,
+    IdsInput,
+    IdsPayloadInput,
     TagSummary,
     TagListInput,
-    TagNamesInput,
-    PayloadInput,
+    PayloadsInput,
     ListEnvelope,
     dump_model,
     dump_model_from_backend,
 )
+from nocfo_toolkit.mcp.curated.utils import decode_tool_handle
 
 
 @tool(
@@ -61,36 +65,39 @@ async def bookkeeping_tags_list(params: TagListInput) -> dict[str, Any]:
         idempotentHint=True,
         openWorldHint=False,
     ),
-    description="Create a new business tag. Tags can be reused across documents and invoices, and for report filtering. Use this first when the requested tag name does not yet exist, then apply it to documents with bookkeeping_document_tags_update.",
+    description="Create one or more business tags in a single call — pass each new tag as an entry in payloads. Tags can be reused across documents and invoices, and for report filtering. Apply them to documents with bookkeeping_document_tags_update.",
+    output_schema=BatchResponse.model_json_schema(),
 )
-async def bookkeeping_tag_create(params: PayloadInput) -> dict[str, Any]:
-    args = params
-    slug = await business_slug(args.business)
-    tag_name = str(args.payload.get("name") or "").strip()
+async def bookkeeping_tag_create(params: PayloadsInput) -> dict[str, Any]:
+    slug = await business_slug(params.business)
     path = f"/v1/business/{slug}/tags/"
-    try:
-        result = await get_client().request(
-            "POST",
-            path,
-            json_body=args.payload,
-            business_slug=slug,
-        )
-    except ToolError as exc:
-        if not tag_name or not _is_duplicate_tag_name_error(exc):
-            raise
-        existing_tag_id = await get_client().resolve_id(
-            f"/v1/business/{slug}/tags/",
-            lookup_field="name",
-            lookup_value=tag_name,
-            search_param="search",
-            business_slug=slug,
-        )
-        result = await get_client().request(
-            "GET",
-            f"/v1/business/{slug}/tags/{existing_tag_id}/",
-            business_slug=slug,
-        )
-    return dump_model_from_backend(TagSummary, result)
+
+    async def _create(payload: dict[str, Any]) -> dict[str, Any]:
+        tag_name = str(payload.get("name") or "").strip()
+        try:
+            result = await get_client().request(
+                "POST", path, json_body=payload, business_slug=slug
+            )
+        except ToolError as exc:
+            if not tag_name or not _is_duplicate_tag_name_error(exc):
+                raise
+            existing_tag_id = await get_client().resolve_id(
+                f"/v1/business/{slug}/tags/",
+                lookup_field="name",
+                lookup_value=tag_name,
+                search_param="search",
+                business_slug=slug,
+            )
+            result = await get_client().request(
+                "GET",
+                f"/v1/business/{slug}/tags/{existing_tag_id}/",
+                business_slug=slug,
+            )
+        return dump_model_from_backend(TagSummary, result)
+
+    return await run_batch(
+        params.payloads, _create, label=lambda payload: payload.get("name")
+    )
 
 
 @tool(
@@ -120,19 +127,22 @@ async def bookkeeping_tag_retrieve(params: IdInput) -> dict[str, Any]:
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Update one business tag by tag_id from bookkeeping_tags_list.",
+    description="Update one or more business tags selected by ids; the same payload is applied to every tag. Batch all targets into one call.",
+    output_schema=BatchResponse.model_json_schema(),
 )
-async def bookkeeping_tag_update(params: IdPayloadInput) -> dict[str, Any]:
-    args = params
-    slug = await business_slug(args.business)
-    path = f"/v1/business/{slug}/tags/{args.id}/"
-    result = await get_client().request(
-        "PATCH",
-        path,
-        json_body=args.payload,
-        business_slug=slug,
-    )
-    return dump_model_from_backend(TagSummary, result)
+async def bookkeeping_tag_update(params: IdsPayloadInput) -> dict[str, Any]:
+    slug = await business_slug(params.business)
+
+    async def _update(tag_id: int) -> dict[str, Any]:
+        result = await get_client().request(
+            "PATCH",
+            f"/v1/business/{slug}/tags/{tag_id}/",
+            json_body=params.payload,
+            business_slug=slug,
+        )
+        return dump_model_from_backend(TagSummary, result)
+
+    return await run_batch(params.ids, _update)
 
 
 @tool(
@@ -143,14 +153,19 @@ async def bookkeeping_tag_update(params: IdPayloadInput) -> dict[str, Any]:
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Delete one business tag by tag_id from bookkeeping_tags_list.",
+    description="Delete one or more business tags in a single call — pass every target in ids. Prefer one batched call over repeated single-target calls (each call needs its own confirmation).",
+    output_schema=BatchResponse.model_json_schema(),
 )
-async def bookkeeping_tag_delete(params: IdInput) -> dict[str, Any]:
-    args = params
-    slug = await business_slug(args.business)
-    path = f"/v1/business/{slug}/tags/{args.id}/"
-    await get_client().request("DELETE", path, business_slug=slug)
-    return dump_model(DeletedResponse(tag_id=args.id))
+async def bookkeeping_tag_delete(params: IdsInput) -> dict[str, Any]:
+    slug = await business_slug(params.business)
+
+    async def _delete(tag_id: int) -> dict[str, Any]:
+        await get_client().request(
+            "DELETE", f"/v1/business/{slug}/tags/{tag_id}/", business_slug=slug
+        )
+        return dump_model(DeletedResponse(tag_id=tag_id))
+
+    return await run_batch(params.ids, _delete)
 
 
 @tool(
@@ -161,30 +176,38 @@ async def bookkeeping_tag_delete(params: IdInput) -> dict[str, Any]:
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Replace a document's tags by document_number and tag names. Use shared business tags from bookkeeping_tags_list. Tag names must already exist; create missing tags first with bookkeeping_tag_create.",
+    description="Replace the tags of one or more documents selected by tool_handles; the same tag_names are applied to every target. Use shared business tags from bookkeeping_tags_list. Tag names must already exist; create missing tags first with bookkeeping_tag_create.",
+    output_schema=BatchResponse.model_json_schema(),
 )
-async def bookkeeping_document_tags_update(params: TagNamesInput) -> dict[str, Any]:
-    args = params
-    slug = await business_slug(args.business)
-    document = await document_by_number(slug, args.document_number)
-    tag_ids = [
-        await get_client().resolve_id(
-            f"/v1/business/{slug}/tags/",
-            lookup_field="name",
-            lookup_value=name,
-            search_param="search",
+async def bookkeeping_document_tags_update(
+    params: DocumentTagsBatchInput,
+) -> dict[str, Any]:
+    slug = await business_slug(params.business)
+    tag_ids = []
+    for name in params.tag_names:
+        tag_ids.append(
+            await get_client().resolve_id(
+                f"/v1/business/{slug}/tags/",
+                lookup_field="name",
+                lookup_value=name,
+                search_param="search",
+                business_slug=slug,
+            )
+        )
+
+    async def _apply(handle: str) -> dict[str, Any]:
+        document_id = decode_tool_handle(
+            handle, expected_resource="bookkeeping_document"
+        )
+        result = await get_client().request(
+            "PATCH",
+            f"/v1/business/{slug}/document/{document_id}/",
+            json_body={"tag_ids": tag_ids},
             business_slug=slug,
         )
-        for name in args.tag_names
-    ]
-    path = f"/v1/business/{slug}/document/{document['id']}/"
-    result = await get_client().request(
-        "PATCH",
-        path,
-        json_body={"tag_ids": tag_ids},
-        business_slug=slug,
-    )
-    return dump_model_from_backend(DocumentSummary, result)
+        return dump_model_from_backend(DocumentSummary, result)
+
+    return await run_batch(params.tool_handles, _apply)
 
 
 @tool(
@@ -238,19 +261,22 @@ async def bookkeeping_file_retrieve(params: IdInput) -> dict[str, Any]:
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Update uploaded file metadata by file_id from bookkeeping_files_list.",
+    description="Update the metadata of one or more uploaded files selected by ids; the same payload is applied to every file. Batch all targets into one call.",
+    output_schema=BatchResponse.model_json_schema(),
 )
-async def bookkeeping_file_update(params: IdPayloadInput) -> dict[str, Any]:
-    args = params
-    slug = await business_slug(args.business)
-    path = f"/v1/business/{slug}/files/{args.id}/"
-    result = await get_client().request(
-        "PATCH",
-        path,
-        json_body=args.payload,
-        business_slug=slug,
-    )
-    return dump_model_from_backend(FileSummary, result)
+async def bookkeeping_file_update(params: IdsPayloadInput) -> dict[str, Any]:
+    slug = await business_slug(params.business)
+
+    async def _update(file_id: int) -> dict[str, Any]:
+        result = await get_client().request(
+            "PATCH",
+            f"/v1/business/{slug}/files/{file_id}/",
+            json_body=params.payload,
+            business_slug=slug,
+        )
+        return dump_model_from_backend(FileSummary, result)
+
+    return await run_batch(params.ids, _update)
 
 
 @tool(
@@ -261,14 +287,19 @@ async def bookkeeping_file_update(params: IdPayloadInput) -> dict[str, Any]:
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Delete an uploaded file by file_id from bookkeeping_files_list.",
+    description="Delete one or more uploaded files in a single call — pass every target in ids. Prefer one batched call over repeated single-target calls (each call needs its own confirmation).",
+    output_schema=BatchResponse.model_json_schema(),
 )
-async def bookkeeping_file_delete(params: IdInput) -> dict[str, Any]:
-    args = params
-    slug = await business_slug(args.business)
-    path = f"/v1/business/{slug}/files/{args.id}/"
-    await get_client().request("DELETE", path, business_slug=slug)
-    return dump_model(DeletedResponse(file_id=args.id))
+async def bookkeeping_file_delete(params: IdsInput) -> dict[str, Any]:
+    slug = await business_slug(params.business)
+
+    async def _delete(file_id: int) -> dict[str, Any]:
+        await get_client().request(
+            "DELETE", f"/v1/business/{slug}/files/{file_id}/", business_slug=slug
+        )
+        return dump_model(DeletedResponse(file_id=file_id))
+
+    return await run_batch(params.ids, _delete)
 
 
 @tool(
@@ -279,23 +310,27 @@ async def bookkeeping_file_delete(params: IdInput) -> dict[str, Any]:
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Upload a file attachment from base64 content and return the file handle for follow-up document workflows.",
+    description="Upload one or more file attachments from base64 content in a single call — pass each file as an entry in files. Returns the file handles for follow-up document workflows.",
+    output_schema=BatchResponse.model_json_schema(),
 )
-async def bookkeeping_file_upload(params: FileUploadInput) -> dict[str, Any]:
-    args = params
-    slug = await business_slug(args.business)
-    try:
-        content = base64.b64decode(args.file_base64)
-    except ValueError:
-        raise_tool_error("validation_error", "file_base64 is not valid base64.")
+async def bookkeeping_file_upload(params: FileUploadsInput) -> dict[str, Any]:
+    slug = await business_slug(params.business)
     path = f"/v1/business/{slug}/file_upload/"
-    result = await get_client().request_multipart(
-        path,
-        files={"file": (args.filename, content, args.content_type)},
-        data={"name": args.filename, "type": args.content_type},
-        business_slug=slug,
-    )
-    return dump_model_from_backend(FileSummary, result)
+
+    async def _upload(spec: FileUploadSpec) -> dict[str, Any]:
+        try:
+            content = base64.b64decode(spec.file_base64)
+        except ValueError:
+            raise_tool_error("validation_error", "file_base64 is not valid base64.")
+        result = await get_client().request_multipart(
+            path,
+            files={"file": (spec.filename, content, spec.content_type)},
+            data={"name": spec.filename, "type": spec.content_type},
+            business_slug=slug,
+        )
+        return dump_model_from_backend(FileSummary, result)
+
+    return await run_batch(params.files, _upload, label=lambda spec: spec.filename)
 
 
 def _is_duplicate_tag_name_error(exc: ToolError) -> bool:

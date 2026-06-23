@@ -11,7 +11,6 @@ from nocfo_toolkit.mcp.curated.schema.common import (
     AgentModel,
     BusinessContextInput,
     BusinessPaginationInput,
-    SalesInvoiceAction,
     SalesInvoiceStatus,
     enum_or_str,
     tool_handle,
@@ -47,19 +46,9 @@ def _derive_invoice_next_action(
     return None, None
 
 
-class InvoiceLookupInput(BusinessContextInput):
-    invoice_number: int | str = Field(description="Invoice number visible to the user.")
-
-
 class InvoiceRetrieveInput(BusinessContextInput):
     tool_handle: str = Field(
         description="Value copied from invoicing_sales_invoices_list.items[].tool_handle or invoicing_purchase_invoices_list.items[].tool_handle. Pass it unchanged to the matching invoice retrieve tool; do not use invoice numbers or database IDs here."
-    )
-
-
-class InvoicePayloadInput(InvoiceLookupInput):
-    payload: dict[str, Any] = Field(
-        description="Fields to create or update. Prefer user-facing values such as account_number, document_number, invoice_number, tag_names, or contact names when supported."
     )
 
 
@@ -179,18 +168,6 @@ class SalesInvoiceLookupInput(BusinessContextInput):
         if has_invoice_number == has_tool_handle:
             raise ValueError("Provide exactly one of invoice_number or tool_handle.")
         return self
-
-
-class SalesInvoicePayloadInput(SalesInvoiceLookupInput):
-    payload: dict[str, Any] = Field(
-        description="Fields to create or update. Prefer user-facing values such as account_number, document_number, invoice_number, tag_names, or contact names when supported."
-    )
-
-
-class SalesInvoiceActionInput(SalesInvoiceLookupInput):
-    action: enum_or_str(SalesInvoiceAction) = Field(
-        description="Action to run on the selected resource."
-    )
 
 
 class SalesInvoiceSummary(AgentModel):
