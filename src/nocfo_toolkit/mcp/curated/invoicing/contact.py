@@ -35,8 +35,11 @@ from nocfo_toolkit.mcp.curated.schemas import (
         openWorldHint=False,
     ),
     description=(
-        "List contacts for the selected business. Supports search and filters such as invoicing-enabled, "
-        "exact name, and excluded contact ID. Use `contact_business_id` to search by asiakastunnus."
+        "List contacts for the selected business. Use this first to ground contact IDs/tool_handles before "
+        "update or delete actions. Supports search and filters such as invoicing-enabled, exact name, and "
+        "excluded contact ID. For duplicate-review workflows, search by exact name or customer number first "
+        "and inspect the returned IDs before deleting anything. Use `contact_business_id` to search by "
+        "asiakastunnus."
     ),
     output_schema=ListEnvelope[ContactListItem].model_json_schema(),
 )
@@ -54,7 +57,12 @@ async def invoicing_contacts_list(
         business_slug=slug,
         item_model=ContactListItem,
         handle_resource="invoicing_contact",
-        usage_hint="Use contact_business_id for exact customer number lookup, then pass tool_handle to invoicing_contact_retrieve.",
+        usage_hint=(
+            "Use contact_business_id for exact customer number lookup. For duplicate cleanup, list matching "
+            "contacts first, review the returned IDs/tool_handles, optionally retrieve the candidates for "
+            "verification, and then pass the exact identifiers to invoicing_contact_delete in one batched "
+            "call."
+        ),
     )
 
 
@@ -66,7 +74,10 @@ async def invoicing_contacts_list(
         idempotentHint=True,
         openWorldHint=False,
     ),
-    description="Retrieve one contact by tool_handle or contact_id for exact follow-up.",
+    description=(
+        "Retrieve one contact by tool_handle or contact_id for exact follow-up. Use this to verify candidate "
+        "duplicate contacts before deleting or editing them."
+    ),
 )
 async def invoicing_contact_retrieve(
     params: ContactRetrieveInput,
@@ -163,8 +174,12 @@ async def invoicing_contact_update(
         openWorldHint=False,
     ),
     description=(
-        "Delete one or more contacts in a single call — pass every target (contact ID or exact name) "
-        "in identifiers. This can fail per contact when it is already used by invoices or bookkeeping documents."
+        "Delete one or more contacts in a single call — pass every target (contact ID or exact name) in "
+        "identifiers. Prefer one batched call over repeated single-contact calls because each destructive call "
+        "needs its own confirmation. For duplicate cleanup, always ground the targets with invoicing_contacts_list "
+        "and/or invoicing_contact_retrieve first, then delete only the exact extra records you verified. Never "
+        "call this with an empty identifiers list or guessed placeholders. This can fail per contact when it is "
+        "already used by invoices or bookkeeping documents."
     ),
     output_schema=BatchResponse.model_json_schema(),
 )

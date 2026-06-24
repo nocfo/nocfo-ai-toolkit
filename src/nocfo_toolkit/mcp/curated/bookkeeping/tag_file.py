@@ -41,7 +41,7 @@ from nocfo_toolkit.mcp.curated.utils import decode_tool_handle
         idempotentHint=True,
         openWorldHint=False,
     ),
-    description="List business tags used across bookkeeping documents and invoices, and as tag filters in reporting.",
+    description="List business tags used across bookkeeping documents and invoices, and as tag filters in reporting. Use this first to ground exact tag IDs/names before updating, deleting, or applying tags.",
     output_schema=ListEnvelope[TagSummary].model_json_schema(),
 )
 async def bookkeeping_tags_list(params: TagListInput) -> dict[str, Any]:
@@ -108,7 +108,7 @@ async def bookkeeping_tag_create(params: PayloadsInput) -> dict[str, Any]:
         idempotentHint=True,
         openWorldHint=False,
     ),
-    description="Retrieve one business tag by tag_id from bookkeeping_tags_list.",
+    description="Retrieve one business tag by tag_id from bookkeeping_tags_list. Use this to verify a tag before updating or deleting it.",
 )
 async def bookkeeping_tag_retrieve(params: IdInput) -> dict[str, Any]:
     args = params
@@ -127,7 +127,7 @@ async def bookkeeping_tag_retrieve(params: IdInput) -> dict[str, Any]:
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Update one or more business tags selected by ids; the same payload is applied to every tag. Batch all targets into one call.",
+    description="Update one or more business tags selected by ids; the same payload is applied to every tag. Ground the exact tag IDs first, then batch all confirmed targets into one call.",
     output_schema=BatchResponse.model_json_schema(),
 )
 async def bookkeeping_tag_update(params: IdsPayloadInput) -> dict[str, Any]:
@@ -153,7 +153,7 @@ async def bookkeeping_tag_update(params: IdsPayloadInput) -> dict[str, Any]:
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Delete one or more business tags in a single call — pass every target in ids. Prefer one batched call over repeated single-target calls (each call needs its own confirmation).",
+    description="Delete one or more business tags in a single call — pass every target in ids. Ground the exact tag IDs first with bookkeeping_tags_list and/or bookkeeping_tag_retrieve, then batch all confirmed targets into one call. Never call this with guessed placeholders or an empty target set. Prefer one batched call over repeated single-target calls (each call needs its own confirmation).",
     output_schema=BatchResponse.model_json_schema(),
 )
 async def bookkeeping_tag_delete(params: IdsInput) -> dict[str, Any]:
@@ -176,7 +176,7 @@ async def bookkeeping_tag_delete(params: IdsInput) -> dict[str, Any]:
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Replace the tags of one or more documents selected by tool_handles; the same tag_names are applied to every target. Use shared business tags from bookkeeping_tags_list. Tag names must already exist; create missing tags first with bookkeeping_tag_create.",
+    description="Replace the tags of one or more documents selected by tool_handles; the same tag_names are applied to every target. First obtain the exact document tool_handles from bookkeeping_documents_list or bookkeeping_document_retrieve, and use shared business tags from bookkeeping_tags_list. Tag names must already exist; create missing tags first with bookkeeping_tag_create. Prefer one batched call over repeated single-document tag updates.",
     output_schema=BatchResponse.model_json_schema(),
 )
 async def bookkeeping_document_tags_update(
@@ -218,7 +218,7 @@ async def bookkeeping_document_tags_update(
         idempotentHint=True,
         openWorldHint=False,
     ),
-    description="List uploaded files/attachments metadata.",
+    description="List uploaded files/attachments metadata. Use this first to ground exact file IDs before updating or deleting files.",
     output_schema=ListEnvelope[FileSummary].model_json_schema(),
 )
 async def bookkeeping_files_list(params: TagListInput) -> dict[str, Any]:
@@ -242,7 +242,7 @@ async def bookkeeping_files_list(params: TagListInput) -> dict[str, Any]:
         idempotentHint=True,
         openWorldHint=False,
     ),
-    description="Retrieve uploaded file metadata by file_id from bookkeeping_files_list.",
+    description="Retrieve uploaded file metadata by file_id from bookkeeping_files_list. Use this to verify a file before updating or deleting it.",
 )
 async def bookkeeping_file_retrieve(params: IdInput) -> dict[str, Any]:
     args = params
@@ -261,7 +261,7 @@ async def bookkeeping_file_retrieve(params: IdInput) -> dict[str, Any]:
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Update the metadata of one or more uploaded files selected by ids; the same payload is applied to every file. Batch all targets into one call.",
+    description="Update the metadata of one or more uploaded files selected by ids; the same payload is applied to every file. Ground the exact file IDs first, then batch all confirmed targets into one call.",
     output_schema=BatchResponse.model_json_schema(),
 )
 async def bookkeeping_file_update(params: IdsPayloadInput) -> dict[str, Any]:
@@ -287,7 +287,7 @@ async def bookkeeping_file_update(params: IdsPayloadInput) -> dict[str, Any]:
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Delete one or more uploaded files in a single call — pass every target in ids. Prefer one batched call over repeated single-target calls (each call needs its own confirmation).",
+    description="Delete one or more uploaded files in a single call — pass every target in ids. Ground the exact file IDs first with bookkeeping_files_list and/or bookkeeping_file_retrieve, then batch all confirmed targets into one call. Never call this with guessed placeholders or an empty target set. Prefer one batched call over repeated single-target calls (each call needs its own confirmation).",
     output_schema=BatchResponse.model_json_schema(),
 )
 async def bookkeeping_file_delete(params: IdsInput) -> dict[str, Any]:

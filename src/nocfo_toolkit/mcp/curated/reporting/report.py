@@ -39,7 +39,7 @@ from nocfo_toolkit.mcp.curated.utils import report_body
         idempotentHint=True,
         openWorldHint=False,
     ),
-    description="List accounting periods for the selected business.",
+    description="List accounting periods for the selected business. Use this first to ground exact period IDs before updating or deleting periods.",
     output_schema=ListEnvelope[PeriodListItem].model_json_schema(),
 )
 async def reporting_accounting_periods_list(
@@ -54,6 +54,7 @@ async def reporting_accounting_periods_list(
         limit=args.limit,
         business_slug=slug,
         item_model=PeriodListItem,
+        usage_hint="List or search periods here first, retrieve a period when verification is needed, and then batch the confirmed period IDs into one update/delete call.",
     )
 
 
@@ -94,8 +95,9 @@ async def reporting_accounting_period_retrieve(
         openWorldHint=False,
     ),
     description=(
-        "Update one or more accounting periods selected by identifiers (period IDs); the same payload "
-        "is applied to every period. Batch all targets into one call. Can fail per period when posted data protects it."
+        "Update one or more accounting periods selected by identifiers (period IDs); the same payload is applied "
+        "to every period. Ground the exact period IDs first, then batch all confirmed targets into one call. Can "
+        "fail per period when posted data protects it."
     ),
     output_schema=BatchResponse.model_json_schema(),
 )
@@ -127,7 +129,7 @@ async def reporting_accounting_period_update(
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Delete one or more accounting periods in a single call — pass every target (period ID) in identifiers. Prefer one batched call over repeated single-target calls (each call needs its own confirmation).",
+    description="Delete one or more accounting periods in a single call — pass every target (period ID) in identifiers. Ground the exact period IDs first with reporting_accounting_periods_list and/or reporting_accounting_period_retrieve, then batch all confirmed targets into one call. Never call this with guessed placeholders or an empty target set. Prefer one batched call over repeated single-target calls (each call needs its own confirmation).",
     output_schema=BatchResponse.model_json_schema(),
 )
 async def reporting_accounting_period_delete(
@@ -155,7 +157,7 @@ async def reporting_accounting_period_delete(
         idempotentHint=True,
         openWorldHint=False,
     ),
-    description="List VAT periods for the selected business.",
+    description="List VAT periods for the selected business. Use this first to ground exact VAT period IDs before updating or deleting VAT periods.",
     output_schema=ListEnvelope[PeriodListItem].model_json_schema(),
 )
 async def reporting_vat_periods_list(
@@ -170,6 +172,7 @@ async def reporting_vat_periods_list(
         limit=args.limit,
         business_slug=slug,
         item_model=PeriodListItem,
+        usage_hint="List or search VAT periods here first, retrieve a VAT period when verification is needed, and then batch the confirmed VAT period IDs into one update/delete call.",
     )
 
 
@@ -206,8 +209,9 @@ async def reporting_vat_period_retrieve(params: IdentifierInput) -> dict[str, An
         openWorldHint=False,
     ),
     description=(
-        "Update one or more VAT periods selected by identifiers (VAT period IDs); the same payload "
-        "is applied to every period. Batch all targets into one call. Each period must be editable and not reported."
+        "Update one or more VAT periods selected by identifiers (VAT period IDs); the same payload is applied to "
+        "every period. Ground the exact VAT period IDs first, then batch all confirmed targets into one call. "
+        "Each period must be editable and not reported."
     ),
     output_schema=BatchResponse.model_json_schema(),
 )
@@ -241,7 +245,9 @@ async def reporting_vat_period_update(
     ),
     description=(
         "Delete one or more VAT periods in a single call — pass every target (VAT period ID) in identifiers. "
-        "Prefer one batched call over repeated single-target calls (each call needs its own confirmation)."
+        "Ground the exact VAT period IDs first with reporting_vat_periods_list and/or reporting_vat_period_retrieve, "
+        "then batch all confirmed targets into one call. Never call this with guessed placeholders or an empty "
+        "target set. Prefer one batched call over repeated single-target calls (each call needs its own confirmation)."
     ),
     output_schema=BatchResponse.model_json_schema(),
 )

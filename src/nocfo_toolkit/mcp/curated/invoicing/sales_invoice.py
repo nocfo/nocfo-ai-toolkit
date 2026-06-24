@@ -38,7 +38,7 @@ from nocfo_toolkit.mcp.curated.utils import decode_tool_handle
         idempotentHint=True,
         openWorldHint=False,
     ),
-    description="List sales invoices by invoice number, status, dates, receiver, reference, or query.",
+    description="List sales invoices by invoice number, status, dates, receiver, reference, or query. Use this first to ground exact invoice numbers/tool_handles before update, delete, send, or workflow actions.",
     output_schema=ListEnvelope[SalesInvoiceListItem].model_json_schema(),
 )
 async def invoicing_sales_invoices_list(
@@ -54,7 +54,12 @@ async def invoicing_sales_invoices_list(
         business_slug=slug,
         item_model=SalesInvoiceListItem,
         handle_resource="invoicing_sales_invoice",
-        usage_hint="Use invoice_number/status/date filters for browsing. Then use tool_handle with invoicing_sales_invoice_retrieve for full invoice data.",
+        usage_hint=(
+            "Use invoice_number/status/date filters for browsing. Then use tool_handle with "
+            "invoicing_sales_invoice_retrieve for full invoice data. Before update/delete/send/action requests, "
+            "ground the exact targets here first and then batch the confirmed invoice numbers or tool_handles into "
+            "one mutation call."
+        ),
     )
 
 
@@ -66,7 +71,7 @@ async def invoicing_sales_invoices_list(
         idempotentHint=True,
         openWorldHint=False,
     ),
-    description="Retrieve one sales invoice from invoicing_sales_invoices_list.items[].tool_handle.",
+    description="Retrieve one sales invoice from invoicing_sales_invoices_list.items[].tool_handle. Use this to verify an invoice before deleting it, sending it, or applying a workflow action.",
 )
 async def invoicing_sales_invoice_retrieve(
     params: InvoiceRetrieveInput,
@@ -116,7 +121,7 @@ async def invoicing_sales_invoice_create(params: PayloadsInput) -> dict[str, Any
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Update one or more sales invoices selected by invoice_numbers or tool_handles; the same payload is applied to every invoice. Batch all targets into one call.",
+    description="Update one or more sales invoices selected by invoice_numbers or tool_handles; the same payload is applied to every invoice. Ground the exact targets first, then batch all confirmed invoices into one call.",
     output_schema=BatchResponse.model_json_schema(),
 )
 async def invoicing_sales_invoice_update(
@@ -147,7 +152,7 @@ async def invoicing_sales_invoice_update(
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Delete one or more sales invoices in a single call — pass every target in invoice_numbers or tool_handles. Prefer one batched call over repeated single-target calls (each call needs its own confirmation).",
+    description="Delete one or more sales invoices in a single call — pass every target in invoice_numbers or tool_handles. Ground the exact targets first with invoicing_sales_invoices_list and/or invoicing_sales_invoice_retrieve, then batch all confirmed invoices into one call. Never call this with guessed placeholders or an empty target set. Prefer one batched call over repeated single-target calls (each call needs its own confirmation).",
     output_schema=BatchResponse.model_json_schema(),
 )
 async def invoicing_sales_invoice_delete(
@@ -175,7 +180,7 @@ async def invoicing_sales_invoice_delete(
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Run a workflow action (accept, mark_paid, mark_unpaid, mark_credit_loss, or disable_recurrence) on one or more sales invoices in a single call — pass every target in invoice_numbers or tool_handles; the same action applies to all.",
+    description="Run a workflow action (accept, mark_paid, mark_unpaid, mark_credit_loss, or disable_recurrence) on one or more sales invoices in a single call — pass every target in invoice_numbers or tool_handles and the same action applies to all. Use this for requests such as accepting invoices or marking invoices paid/unpaid. First obtain the exact targets from invoicing_sales_invoices_list or invoicing_sales_invoice_retrieve, then pass those values unchanged here. Prefer one batched call over repeated single-invoice calls.",
     output_schema=BatchResponse.model_json_schema(),
 )
 async def invoicing_sales_invoice_action(
@@ -236,7 +241,7 @@ async def invoicing_sales_invoice_delivery_methods(
         idempotentHint=False,
         openWorldHint=True,
     ),
-    description="Send one or more sales invoices using a selected delivery method — pass every target in invoice_numbers or tool_handles; the same payload (delivery method) is applied to all. Call only after the user explicitly confirms sending.",
+    description="Send one or more sales invoices using a selected delivery method — pass every target in invoice_numbers or tool_handles and the same payload (delivery method) is applied to all. First ground the exact targets with invoicing_sales_invoices_list or invoicing_sales_invoice_retrieve, and check invoicing_sales_invoice_delivery_methods when needed. Call only after the user explicitly confirms sending. Prefer one batched call over repeated single-invoice sends.",
     output_schema=BatchResponse.model_json_schema(),
 )
 async def invoicing_sales_invoice_send(

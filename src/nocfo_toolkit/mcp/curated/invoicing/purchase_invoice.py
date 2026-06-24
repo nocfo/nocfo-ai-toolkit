@@ -33,8 +33,9 @@ from nocfo_toolkit.mcp.curated.utils import decode_tool_handle
         openWorldHint=False,
     ),
     description=(
-        "List purchase invoices for the selected business. Use `invoice_number` for deterministic lookup. "
-        "`import_source`, `is_paid`, and `is_past_due` narrow compact scans before falling back to `search`."
+        "List purchase invoices for the selected business. Use this first to ground exact invoice numbers/tool_handles "
+        "before updating or deleting invoices. Use `invoice_number` for deterministic lookup. `import_source`, "
+        "`is_paid`, and `is_past_due` narrow compact scans before falling back to `search`."
     ),
     output_schema=ListEnvelope[PurchaseInvoiceListItem].model_json_schema(),
 )
@@ -51,7 +52,11 @@ async def invoicing_purchase_invoices_list(
         business_slug=slug,
         item_model=PurchaseInvoiceListItem,
         handle_resource="invoicing_purchase_invoice",
-        usage_hint="Use invoice_number/date/state filters for browsing. Then use tool_handle with invoicing_purchase_invoice_retrieve for full invoice data.",
+        usage_hint=(
+            "Use invoice_number/date/state filters for browsing. Then use tool_handle with "
+            "invoicing_purchase_invoice_retrieve for full invoice data. Before update/delete actions, ground the "
+            "exact targets here first and then batch the confirmed invoice numbers into one mutation call."
+        ),
     )
 
 
@@ -94,8 +99,8 @@ async def invoicing_purchase_invoice_retrieve(
         openWorldHint=False,
     ),
     description=(
-        "Update one or more purchase invoices selected by invoice_numbers; the same payload "
-        "is applied to every invoice. Batch all targets into one call."
+        "Update one or more purchase invoices selected by invoice_numbers; the same payload is applied to every "
+        "invoice. Ground the exact invoice numbers first, then batch all confirmed targets into one call."
     ),
     output_schema=BatchResponse.model_json_schema(),
 )
@@ -132,8 +137,10 @@ async def invoicing_purchase_invoice_update(
         openWorldHint=False,
     ),
     description=(
-        "Delete one or more purchase invoices in a single call — pass every target in invoice_numbers. "
-        "Prefer one batched call over repeated single-target calls (each call needs its own confirmation)."
+        "Delete one or more purchase invoices in a single call — pass every target in invoice_numbers. Ground the "
+        "exact invoice numbers first with invoicing_purchase_invoices_list and/or invoicing_purchase_invoice_retrieve, "
+        "then batch all confirmed targets into one call. Never call this with guessed placeholders or an empty "
+        "target set. Prefer one batched call over repeated single-target calls (each call needs its own confirmation)."
     ),
     output_schema=BatchResponse.model_json_schema(),
 )

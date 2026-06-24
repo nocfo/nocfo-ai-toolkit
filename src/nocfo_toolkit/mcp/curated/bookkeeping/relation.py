@@ -31,7 +31,7 @@ from nocfo_toolkit.mcp.curated.schemas import (
         idempotentHint=True,
         openWorldHint=False,
     ),
-    description="List document-to-document relations for a context document.",
+    description="List document-to-document relations for a context document. Use this first to ground exact relation IDs before deleting relations.",
     output_schema=ListEnvelope[RelationSummary].model_json_schema(),
 )
 async def bookkeeping_document_relations_list(
@@ -118,7 +118,7 @@ async def bookkeeping_document_relation_create(
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Delete one or more relations for the same document context in a single call — pass every target in relation_ids.",
+    description="Delete one or more relations for the same document context in a single call — pass every target in relation_ids. First ground the exact relation IDs with bookkeeping_document_relations_list, then batch all confirmed targets into one call. Never call this with guessed placeholders or an empty target set. Prefer one batched call over repeated single-relation calls.",
     output_schema=BatchResponse.model_json_schema(),
 )
 async def bookkeeping_document_relation_delete(

@@ -33,8 +33,9 @@ from nocfo_toolkit.mcp.curated.schemas import (
         openWorldHint=False,
     ),
     description=(
-        "List invoicing products for the selected business. Products are reusable invoice row templates "
-        "and support code/name search. Use `code` for deterministic lookup when the product code is known."
+        "List invoicing products for the selected business. Products are reusable invoice row templates and "
+        "support code/name search. Use this first to ground exact identifiers before updating or deleting "
+        "products. Use `code` for deterministic lookup when the product code is known."
     ),
     output_schema=ListEnvelope[ProductListItem].model_json_schema(),
 )
@@ -51,7 +52,11 @@ async def invoicing_products_list(
         business_slug=slug,
         item_model=ProductListItem,
         handle_resource="invoicing_product",
-        usage_hint="Use product code/name query in list, then use tool_handle with invoicing_product_retrieve for full details.",
+        usage_hint=(
+            "Use product code/name query in list, then use tool_handle with invoicing_product_retrieve for full "
+            "details. Before update/delete actions, ground the exact products here first and then batch the "
+            "resolved identifiers into one mutation call."
+        ),
     )
 
 
@@ -64,8 +69,8 @@ async def invoicing_products_list(
         openWorldHint=False,
     ),
     description=(
-        "Retrieve one product by ID. If ID is unknown, call `invoicing_products_list` "
-        "with `code` first, then use `search` as fallback."
+        "Retrieve one product by ID. Use this to verify a product before updating or deleting it. If ID is "
+        "unknown, call `invoicing_products_list` with `code` first, then use `search` as fallback."
     ),
 )
 async def invoicing_product_retrieve(params: IdentifierInput) -> dict[str, Any]:
@@ -125,7 +130,7 @@ async def invoicing_product_create(params: PayloadsInput) -> dict[str, Any]:
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Update one or more invoicing products selected by identifiers; the same payload is applied to every product. Keep amount and is_vat_inclusive aligned (true=VAT-inclusive amount, false=VAT-exclusive amount). Prefer resolving by product code.",
+    description="Update one or more invoicing products selected by identifiers; the same payload is applied to every product. Keep amount and is_vat_inclusive aligned (true=VAT-inclusive amount, false=VAT-exclusive amount). Prefer resolving by product code. Ground the exact products first and batch all confirmed targets into one call.",
     output_schema=BatchResponse.model_json_schema(),
 )
 async def invoicing_product_update(
@@ -164,7 +169,7 @@ async def invoicing_product_update(
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Delete one or more invoicing products in a single call — pass every target in identifiers. Prefer resolving by product code. Prefer one batched call over repeated single-target calls (each call needs its own confirmation).",
+    description="Delete one or more invoicing products in a single call — pass every target in identifiers. Prefer resolving by product code. Ground the exact products first with invoicing_products_list and/or invoicing_product_retrieve, then batch all confirmed targets into one call. Never call this with guessed placeholders or an empty target set. Prefer one batched call over repeated single-target calls (each call needs its own confirmation).",
     output_schema=BatchResponse.model_json_schema(),
 )
 async def invoicing_product_delete(params: IdentifiersInput) -> dict[str, Any]:

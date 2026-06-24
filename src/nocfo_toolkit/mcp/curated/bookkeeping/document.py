@@ -45,7 +45,13 @@ from nocfo_toolkit.mcp.curated.utils import decode_tool_handle, items
         idempotentHint=True,
         openWorldHint=False,
     ),
-    description="List bookkeeping documents by document number, dates, contact, tag, account number, VAT code/rate, workflow state, or query.",
+    description=(
+        "List bookkeeping documents by document number, dates, contact, tag, account number, VAT code/rate, "
+        "workflow state, or query. Use this first to ground exact tool_handles before document update, delete, "
+        "lock, or unlock actions. For unlock requests, filter with is_locked=true, review the returned "
+        "tool_handles, and then pass those exact handles unchanged to bookkeeping_document_action with "
+        "action='unlock'."
+    ),
     output_schema=ListEnvelope[DocumentListItem].model_json_schema(),
 )
 async def bookkeeping_documents_list(
@@ -72,7 +78,12 @@ async def bookkeeping_documents_list(
         business_slug=slug,
         item_model=DocumentListItem,
         handle_resource="bookkeeping_document",
-        usage_hint="Use document_number/date filters to browse periods (e.g. one month). For account filtering, prefer account_number. Then pass tool_handle to bookkeeping_document_retrieve for full details.",
+        usage_hint=(
+            "Use document_number/date filters to browse periods (e.g. one month). For account filtering, prefer "
+            "account_number. For lock/unlock workflows, list the target documents first (for example with "
+            "is_locked=true), then pass the returned tool_handles unchanged to bookkeeping_document_action in one "
+            "batched call. Use bookkeeping_document_retrieve for full details when verification is needed."
+        ),
     )
     return result
 
@@ -85,7 +96,11 @@ async def bookkeeping_documents_list(
         idempotentHint=True,
         openWorldHint=False,
     ),
-    description="Retrieve one bookkeeping document from bookkeeping_documents_list.items[].tool_handle. Includes blueprint/entry/relation workflow summaries.",
+    description=(
+        "Retrieve one bookkeeping document from bookkeeping_documents_list.items[].tool_handle. Includes "
+        "blueprint/entry/relation workflow summaries. Use this when you need to verify a document before "
+        "deleting it or changing its state."
+    ),
 )
 async def bookkeeping_document_retrieve(
     params: DocumentRetrieveInput,
@@ -328,7 +343,14 @@ async def bookkeeping_document_finalize_active_suggestion(
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Run a state action (lock/unlock/flag/unflag) on one or more documents in a single call — pass every target in tool_handles; the same action applies to all.",
+    description=(
+        "Run a state action (lock/unlock/flag/unflag) on one or more documents in a single call — pass every "
+        "target in tool_handles and the same action applies to all. Use this tool for requests such as 'unlock "
+        "locked documents' or 'lock these documents'. First obtain the exact tool_handles from "
+        "bookkeeping_documents_list or bookkeeping_document_retrieve, then pass those handles unchanged here. "
+        "Prefer one batched call over repeated single-document calls because each action call needs its own "
+        "confirmation. For unlocking, use action='unlock'; for locking, use action='lock'."
+    ),
     output_schema=BatchResponse.model_json_schema(),
 )
 async def bookkeeping_document_action(

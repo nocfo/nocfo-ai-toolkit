@@ -50,7 +50,7 @@ account_fields = (
         idempotentHint=True,
         openWorldHint=False,
     ),
-    description="List bookkeeping accounts by account number, account range, name query, type, usage, or visibility. Use account numbers when talking with users.",
+    description="List bookkeeping accounts by account number, account range, name query, type, usage, or visibility. Use this first to ground exact account numbers/tool_handles before updating, deleting, showing, or hiding accounts. Use account numbers when talking with users.",
     output_schema=ListEnvelope[AccountListItem].model_json_schema(),
 )
 async def bookkeeping_accounts_list(params: AccountListInput) -> dict[str, Any]:
@@ -65,7 +65,11 @@ async def bookkeeping_accounts_list(params: AccountListInput) -> dict[str, Any]:
         fields=account_fields,
         item_model=AccountListItem,
         handle_resource="bookkeeping_account",
-        usage_hint="For account number lookup (e.g. 1910), set number filter and then use tool_handle with bookkeeping_account_retrieve.",
+        usage_hint=(
+            "For account number lookup (e.g. 1910), set number filter and then use tool_handle with "
+            "bookkeeping_account_retrieve. Before update/delete/show/hide actions, ground the exact targets here "
+            "first and then batch the confirmed account numbers into one mutation call."
+        ),
     )
 
 
@@ -77,7 +81,7 @@ async def bookkeeping_accounts_list(params: AccountListInput) -> dict[str, Any]:
         idempotentHint=True,
         openWorldHint=False,
     ),
-    description="Retrieve one account from bookkeeping_accounts_list.items[].tool_handle.",
+    description="Retrieve one account from bookkeeping_accounts_list.items[].tool_handle. Use this to verify an account before updating, deleting, showing, or hiding it.",
 )
 async def bookkeeping_account_retrieve(
     params: AccountRetrieveInput,
@@ -132,7 +136,7 @@ async def bookkeeping_account_create(params: PayloadsInput) -> dict[str, Any]:
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Update one or more bookkeeping accounts selected by account_numbers; the same payload is applied to every account. Batch all targets into one call.",
+    description="Update one or more bookkeeping accounts selected by account_numbers; the same payload is applied to every account. Ground the exact account numbers first, then batch all confirmed targets into one call.",
     output_schema=BatchResponse.model_json_schema(),
 )
 async def bookkeeping_account_update(
@@ -166,7 +170,7 @@ async def bookkeeping_account_update(
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Delete one or more bookkeeping accounts in a single call — pass every target in account_numbers. Prefer one batched call over repeated single-target calls (each call needs its own confirmation).",
+    description="Delete one or more bookkeeping accounts in a single call — pass every target in account_numbers. Ground the exact account numbers first with bookkeeping_accounts_list and/or bookkeeping_account_retrieve, then batch all confirmed targets into one call. Never call this with guessed placeholders or an empty target set. Prefer one batched call over repeated single-target calls (each call needs its own confirmation).",
     output_schema=BatchResponse.model_json_schema(),
 )
 async def bookkeeping_account_delete(params: AccountNumbersInput) -> dict[str, Any]:
@@ -197,7 +201,7 @@ async def bookkeeping_account_delete(params: AccountNumbersInput) -> dict[str, A
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Show or hide one or more bookkeeping accounts in a single call — pass every target in account_numbers; the same action applies to all.",
+    description="Show or hide one or more bookkeeping accounts in a single call — pass every target in account_numbers and the same action applies to all. First obtain the exact account numbers from bookkeeping_accounts_list or bookkeeping_account_retrieve, then pass those values unchanged here. Prefer one batched call over repeated single-account calls.",
     output_schema=BatchResponse.model_json_schema(),
 )
 async def bookkeeping_account_action(
