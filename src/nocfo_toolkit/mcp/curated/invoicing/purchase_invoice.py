@@ -11,11 +11,11 @@ from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.schemas import (
     BatchResponse,
     DeletedResponse,
-    InvoiceNumbersInput,
-    InvoiceNumbersPayloadInput,
     InvoiceRetrieveInput,
     ListEnvelope,
     PurchaseInvoiceListItem,
+    PurchaseInvoiceTargetsInput,
+    PurchaseInvoiceTargetsPayloadInput,
     PurchaseInvoicesListInput,
     PurchaseInvoiceSummary,
     dump_model,
@@ -55,7 +55,8 @@ async def invoicing_purchase_invoices_list(
         usage_hint=(
             "Use invoice_number/date/state filters for browsing. Then use tool_handle with "
             "invoicing_purchase_invoice_retrieve for full invoice data. Before update/delete actions, ground the "
-            "exact targets here first and then batch the confirmed invoice numbers into one mutation call."
+            "exact targets here first and then batch the confirmed invoice numbers or tool_handles into one mutation "
+            "call."
         ),
     )
 
@@ -99,24 +100,20 @@ async def invoicing_purchase_invoice_retrieve(
         openWorldHint=False,
     ),
     description=(
-        "Update one or more purchase invoices selected by invoice_numbers; the same payload is applied to every "
-        "invoice. Ground the exact invoice numbers first, then batch all confirmed targets into one call."
+        "Update one or more purchase invoices selected by invoice_numbers or tool_handles; the same payload is "
+        "applied to every invoice. Ground the exact targets first, then batch all confirmed purchase invoices into "
+        "one call."
     ),
     output_schema=BatchResponse.model_json_schema(),
 )
 async def invoicing_purchase_invoice_update(
-    params: InvoiceNumbersPayloadInput,
+    params: PurchaseInvoiceTargetsPayloadInput,
 ) -> dict[str, Any]:
     slug = await business_slug(params.business)
+    targets, kind = _purchase_invoice_targets(params)
 
-    async def _update(invoice_number: int | str) -> dict[str, Any]:
-        purchase_invoice_id = await get_client().resolve_id(
-            f"/v1/invoicing/{slug}/purchase_invoice/",
-            lookup_field="invoice_number",
-            lookup_value=invoice_number,
-            search_param="search",
-            business_slug=slug,
-        )
+    async def _update(target: int | str) -> dict[str, Any]:
+        purchase_invoice_id = await _resolve_target(slug, target, kind)
         result = await get_client().request(
             "PATCH",
             f"/v1/invoicing/{slug}/purchase_invoice/{purchase_invoice_id}/",
@@ -125,7 +122,7 @@ async def invoicing_purchase_invoice_update(
         )
         return dump_model_from_backend(PurchaseInvoiceSummary, result)
 
-    return await run_batch(params.invoice_numbers, _update)
+    return await run_batch(targets, _update)
 
 
 @tool(
@@ -137,31 +134,53 @@ async def invoicing_purchase_invoice_update(
         openWorldHint=False,
     ),
     description=(
-        "Delete one or more purchase invoices in a single call — pass every target in invoice_numbers. Ground the "
-        "exact invoice numbers first with invoicing_purchase_invoices_list and/or invoicing_purchase_invoice_retrieve, "
-        "then batch all confirmed targets into one call. Never call this with guessed placeholders or an empty "
-        "target set. Prefer one batched call over repeated single-target calls (each call needs its own confirmation)."
+        "Delete one or more purchase invoices in a single call — pass every target in invoice_numbers or "
+        "tool_handles. Ground the exact targets first with invoicing_purchase_invoices_list and/or "
+        "invoicing_purchase_invoice_retrieve, then batch all confirmed invoices into one call. Never call this with "
+        "guessed placeholders or an empty target set. Prefer one batched call over repeated single-target calls "
+        "(each call needs its own confirmation)."
     ),
     output_schema=BatchResponse.model_json_schema(),
 )
 async def invoicing_purchase_invoice_delete(
-    params: InvoiceNumbersInput,
+    params: PurchaseInvoiceTargetsInput,
 ) -> dict[str, Any]:
     slug = await business_slug(params.business)
+    targets, kind = _purchase_invoice_targets(params)
 
-    async def _delete(invoice_number: int | str) -> dict[str, Any]:
-        purchase_invoice_id = await get_client().resolve_id(
-            f"/v1/invoicing/{slug}/purchase_invoice/",
-            lookup_field="invoice_number",
-            lookup_value=invoice_number,
-            search_param="search",
-            business_slug=slug,
-        )
+    async def _delete(target: int | str) -> dict[str, Any]:
+        purchase_invoice_id = await _resolve_target(slug, target, kind)
         await get_client().request(
             "DELETE",
             f"/v1/invoicing/{slug}/purchase_invoice/{purchase_invoice_id}/",
             business_slug=slug,
         )
-        return dump_model(DeletedResponse(invoice_number=invoice_number))
+        invoice_number = target if kind == "invoice_number" else None
+        return dump_model(
+            DeletedResponse(invoice_number=invoice_number, id=purchase_invoice_id)
+        )
 
-    return await run_batch(params.invoice_numbers, _delete)
+    return await run_batch(targets, _delete)
+
+
+def _purchase_invoice_targets(
+    params: PurchaseInvoiceTargetsInput,
+) -> tuple[list[Any], str]:
+    """Return (targets, kind) for the selector list the caller provided."""
+    if params.tool_handles:
+        return list(params.tool_handles), "tool_handle"
+    return list(params.invoice_numbers or []), "invoice_number"
+
+
+async def _resolve_target(slug: str, target: Any, kind: str) -> int:
+    if kind == "tool_handle":
+        return decode_tool_handle(
+            target, expected_resource="invoicing_purchase_invoice"
+        )
+    return await get_client().resolve_id(
+        f"/v1/invoicing/{slug}/purchase_invoice/",
+        lookup_field="invoice_number",
+        lookup_value=target,
+        search_param="search",
+        business_slug=slug,
+    )

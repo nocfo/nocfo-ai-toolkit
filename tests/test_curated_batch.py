@@ -14,6 +14,10 @@ from nocfo_toolkit.mcp.curated.bookkeeping.account import (
     bookkeeping_account_update,
 )
 from nocfo_toolkit.mcp.curated.bookkeeping.document import bookkeeping_document_delete
+from nocfo_toolkit.mcp.curated.invoicing.purchase_invoice import (
+    invoicing_purchase_invoice_delete,
+    invoicing_purchase_invoice_update,
+)
 from nocfo_toolkit.mcp.curated.bookkeeping.tag_file import (
     bookkeeping_document_tags_update,
     bookkeeping_tag_create,
@@ -24,6 +28,8 @@ from nocfo_toolkit.mcp.curated.schemas import (
     AccountNumbersPayloadInput,
     DocumentTagsBatchInput,
     PayloadsInput,
+    PurchaseInvoiceTargetsInput,
+    PurchaseInvoiceTargetsPayloadInput,
     SalesInvoiceTargetsInput,
     ToolHandlesInput,
 )
@@ -183,6 +189,83 @@ def test_sales_invoice_targets_require_exactly_one_selector() -> None:
         SalesInvoiceTargetsInput(
             business="demo", invoice_numbers=[1], tool_handles=["h"]
         )
+
+
+def test_purchase_invoice_targets_require_exactly_one_selector() -> None:
+    PurchaseInvoiceTargetsInput(business="demo", invoice_numbers=[1])
+    PurchaseInvoiceTargetsInput(business="demo", tool_handles=["h"])
+    with pytest.raises(ValueError):
+        PurchaseInvoiceTargetsInput(business="demo")
+    with pytest.raises(ValueError):
+        PurchaseInvoiceTargetsInput(
+            business="demo", invoice_numbers=[1], tool_handles=["h"]
+        )
+
+
+def test_purchase_invoice_delete_accepts_tool_handle_selector() -> None:
+    calls: list[tuple[str, str]] = []
+
+    async def _request(method, path, *, business_slug=None, **_kwargs):
+        calls.append((method, path))
+        return None
+
+    client = SimpleNamespace(request=_request)
+
+    async def _slug(_: str) -> str:
+        return "demo"
+
+    params = PurchaseInvoiceTargetsInput(
+        business="demo",
+        tool_handles=encode_tool_handle("invoicing_purchase_invoice", 8),
+    )
+    with (
+        patch(
+            "nocfo_toolkit.mcp.curated.invoicing.purchase_invoice.business_slug", _slug
+        ),
+        patch(
+            "nocfo_toolkit.mcp.curated.invoicing.purchase_invoice.get_client",
+            return_value=client,
+        ),
+    ):
+        result = asyncio.run(invoicing_purchase_invoice_delete(params))
+
+    assert result["succeeded"] == 1
+    assert result["results"][0]["result"]["id"] == 8
+    assert calls == [("DELETE", "/v1/invoicing/demo/purchase_invoice/8/")]
+
+
+def test_purchase_invoice_update_accepts_tool_handle_selector() -> None:
+    calls: list[tuple[str, str, dict[str, object] | None]] = []
+
+    async def _request(method, path, *, json_body=None, business_slug=None, **_kwargs):
+        calls.append((method, path, json_body))
+        return {"id": 8, "invoice_number": "PI-8"}
+
+    client = SimpleNamespace(request=_request)
+
+    async def _slug(_: str) -> str:
+        return "demo"
+
+    params = PurchaseInvoiceTargetsPayloadInput(
+        business="demo",
+        tool_handles=encode_tool_handle("invoicing_purchase_invoice", 8),
+        payload={"reference": "updated"},
+    )
+    with (
+        patch(
+            "nocfo_toolkit.mcp.curated.invoicing.purchase_invoice.business_slug", _slug
+        ),
+        patch(
+            "nocfo_toolkit.mcp.curated.invoicing.purchase_invoice.get_client",
+            return_value=client,
+        ),
+    ):
+        result = asyncio.run(invoicing_purchase_invoice_update(params))
+
+    assert result["succeeded"] == 1
+    assert calls == [
+        ("PATCH", "/v1/invoicing/demo/purchase_invoice/8/", {"reference": "updated"})
+    ]
 
 
 def test_document_tags_update_applies_shared_tags_to_each_handle() -> None:
