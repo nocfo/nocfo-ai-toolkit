@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import AliasChoices, ConfigDict, Field, model_validator
+from pydantic import (
+    AliasChoices,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    model_validator,
+)
 
+from nocfo_toolkit.mcp.curated.schema.batch import as_list
 from nocfo_toolkit.mcp.curated.schema.common import (
     AgentModel,
     BusinessContextInput,
@@ -167,6 +174,19 @@ class ContactUpdateInput(BusinessContextInput):
         if not updated_fields:
             raise ValueError("Provide at least one field to update.")
         return self
+
+
+class ContactCreatesInput(BusinessContextInput):
+    contacts: Annotated[list[ContactCreateInput], BeforeValidator(as_list)] = Field(
+        description="One or more contacts to create; one full contact spec per entry."
+    )
+
+
+class ContactUpdatesInput(BusinessContextInput):
+    contacts: Annotated[list[ContactUpdateInput], BeforeValidator(as_list)] = Field(
+        description="One or more contact update specs; each entry selects a contact by "
+        "identifier and lists the fields to change."
+    )
 
 
 class ContactSummary(AgentModel):

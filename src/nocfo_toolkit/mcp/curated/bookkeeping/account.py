@@ -6,19 +6,21 @@ from typing import Any
 
 from fastmcp.tools import tool
 from fastmcp.tools.tool import ToolAnnotations
+from nocfo_toolkit.mcp.curated.batch import run_batch
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.schemas import (
-    AccountActionInput,
     AccountListItem,
     AccountListInput,
-    AccountNumberInput,
-    AccountPayloadInput,
+    AccountNumbersActionInput,
+    AccountNumbersInput,
+    AccountNumbersPayloadInput,
     AccountRetrieveInput,
     AccountSummary,
     ActionResponse,
+    BatchResponse,
     DeletedResponse,
     ListEnvelope,
-    PayloadInput,
+    PayloadsInput,
     dump_model,
     dump_model_from_backend,
 )
@@ -48,7 +50,7 @@ account_fields = (
         idempotentHint=True,
         openWorldHint=False,
     ),
-    description="List bookkeeping accounts by account number, account range, name query, type, usage, or visibility. Use account numbers when talking with users.",
+    description="List bookkeeping accounts by account number, account range, name query, type, usage, or visibility. Use this first to ground exact account numbers/tool_handles before updating, deleting, showing, or hiding accounts. Use account numbers when talking with users.",
     output_schema=ListEnvelope[AccountListItem].model_json_schema(),
 )
 async def bookkeeping_accounts_list(params: AccountListInput) -> dict[str, Any]:
@@ -63,7 +65,11 @@ async def bookkeeping_accounts_list(params: AccountListInput) -> dict[str, Any]:
         fields=account_fields,
         item_model=AccountListItem,
         handle_resource="bookkeeping_account",
-        usage_hint="For account number lookup (e.g. 1910), set number filter and then use tool_handle with bookkeeping_account_retrieve.",
+        usage_hint=(
+            "For account number lookup (e.g. 1910), set number filter and then use tool_handle with "
+            "bookkeeping_account_retrieve. Before update/delete/show/hide actions, ground the exact targets here "
+            "first and then batch the confirmed account numbers into one mutation call."
+        ),
     )
 
 
@@ -75,7 +81,7 @@ async def bookkeeping_accounts_list(params: AccountListInput) -> dict[str, Any]:
         idempotentHint=True,
         openWorldHint=False,
     ),
-    description="Retrieve one account from bookkeeping_accounts_list.items[].tool_handle.",
+    description="Retrieve one account from bookkeeping_accounts_list.items[].tool_handle. Use this to verify an account before updating, deleting, showing, or hiding it.",
 )
 async def bookkeeping_account_retrieve(
     params: AccountRetrieveInput,
@@ -102,19 +108,24 @@ async def bookkeeping_account_retrieve(
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Create a bookkeeping account. Use account numbers and account names that match the user request.",
+    description="Create one or more bookkeeping accounts in a single call — pass each new account as an entry in payloads. Use account numbers and names that match the user request.",
+    output_schema=BatchResponse.model_json_schema(),
 )
-async def bookkeeping_account_create(params: PayloadInput) -> dict[str, Any]:
-    args = params
-    slug = await business_slug(args.business)
+async def bookkeeping_account_create(params: PayloadsInput) -> dict[str, Any]:
+    slug = await business_slug(params.business)
     path = f"/v1/business/{slug}/account/"
-    result = await get_client().request(
-        "POST",
-        path,
-        json_body=args.payload,
-        business_slug=slug,
+
+    async def _create(payload: dict[str, Any]) -> dict[str, Any]:
+        result = await get_client().request(
+            "POST", path, json_body=payload, business_slug=slug
+        )
+        return dump_model_from_backend(AccountSummary, result)
+
+    return await run_batch(
+        params.payloads,
+        _create,
+        label=lambda payload: payload.get("number") or payload.get("name"),
     )
-    return dump_model_from_backend(AccountSummary, result)
 
 
 @tool(
@@ -125,25 +136,30 @@ async def bookkeeping_account_create(params: PayloadInput) -> dict[str, Any]:
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Update a bookkeeping account selected by account_number.",
+    description="Update one or more bookkeeping accounts selected by account_numbers; the same payload is applied to every account. Ground the exact account numbers first, then batch all confirmed targets into one call.",
+    output_schema=BatchResponse.model_json_schema(),
 )
-async def bookkeeping_account_update(params: AccountPayloadInput) -> dict[str, Any]:
-    args = params
-    slug = await business_slug(args.business)
-    account_id = await get_client().resolve_id(
-        f"/v1/business/{slug}/account/",
-        lookup_field="number",
-        lookup_value=args.account_number,
-        business_slug=slug,
-    )
-    path = f"/v1/business/{slug}/account/{account_id}/"
-    result = await get_client().request(
-        "PATCH",
-        path,
-        json_body=args.payload,
-        business_slug=slug,
-    )
-    return dump_model_from_backend(AccountSummary, result)
+async def bookkeeping_account_update(
+    params: AccountNumbersPayloadInput,
+) -> dict[str, Any]:
+    slug = await business_slug(params.business)
+
+    async def _update(account_number: int) -> dict[str, Any]:
+        account_id = await get_client().resolve_id(
+            f"/v1/business/{slug}/account/",
+            lookup_field="number",
+            lookup_value=account_number,
+            business_slug=slug,
+        )
+        result = await get_client().request(
+            "PATCH",
+            f"/v1/business/{slug}/account/{account_id}/",
+            json_body=params.payload,
+            business_slug=slug,
+        )
+        return dump_model_from_backend(AccountSummary, result)
+
+    return await run_batch(params.account_numbers, _update)
 
 
 @tool(
@@ -154,24 +170,27 @@ async def bookkeeping_account_update(params: AccountPayloadInput) -> dict[str, A
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Delete a bookkeeping account selected by account_number.",
+    description="Delete one or more bookkeeping accounts in a single call — pass every target in account_numbers. Ground the exact account numbers first with bookkeeping_accounts_list and/or bookkeeping_account_retrieve, then batch all confirmed targets into one call. Never call this with guessed placeholders or an empty target set. Prefer one batched call over repeated single-target calls (each call needs its own confirmation).",
+    output_schema=BatchResponse.model_json_schema(),
 )
-async def bookkeeping_account_delete(params: AccountNumberInput) -> dict[str, Any]:
-    args = params
-    slug = await business_slug(args.business)
-    account_id = await get_client().resolve_id(
-        f"/v1/business/{slug}/account/",
-        lookup_field="number",
-        lookup_value=args.account_number,
-        business_slug=slug,
-    )
-    path = f"/v1/business/{slug}/account/{account_id}/"
-    await get_client().request(
-        "DELETE",
-        path,
-        business_slug=slug,
-    )
-    return dump_model(DeletedResponse(account_number=args.account_number))
+async def bookkeeping_account_delete(params: AccountNumbersInput) -> dict[str, Any]:
+    slug = await business_slug(params.business)
+
+    async def _delete(account_number: int) -> dict[str, Any]:
+        account_id = await get_client().resolve_id(
+            f"/v1/business/{slug}/account/",
+            lookup_field="number",
+            lookup_value=account_number,
+            business_slug=slug,
+        )
+        await get_client().request(
+            "DELETE",
+            f"/v1/business/{slug}/account/{account_id}/",
+            business_slug=slug,
+        )
+        return dump_model(DeletedResponse(account_number=account_number))
+
+    return await run_batch(params.account_numbers, _delete)
 
 
 @tool(
@@ -182,23 +201,28 @@ async def bookkeeping_account_delete(params: AccountNumberInput) -> dict[str, An
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Show or hide a bookkeeping account selected by account_number.",
+    description="Show or hide one or more bookkeeping accounts in a single call — pass every target in account_numbers and the same action applies to all. First obtain the exact account numbers from bookkeeping_accounts_list or bookkeeping_account_retrieve, then pass those values unchanged here. Prefer one batched call over repeated single-account calls.",
+    output_schema=BatchResponse.model_json_schema(),
 )
-async def bookkeeping_account_action(params: AccountActionInput) -> dict[str, Any]:
-    args = params
-    slug = await business_slug(args.business)
-    account_id = await get_client().resolve_id(
-        f"/v1/business/{slug}/account/",
-        lookup_field="number",
-        lookup_value=args.account_number,
-        business_slug=slug,
-    )
-    path = f"/v1/business/{slug}/account/{account_id}/{args.action.value}/"
-    await get_client().request(
-        "POST",
-        path,
-        business_slug=slug,
-    )
-    return dump_model(
-        ActionResponse(account_number=args.account_number, action=args.action.value)
-    )
+async def bookkeeping_account_action(
+    params: AccountNumbersActionInput,
+) -> dict[str, Any]:
+    slug = await business_slug(params.business)
+
+    async def _act(account_number: int) -> dict[str, Any]:
+        account_id = await get_client().resolve_id(
+            f"/v1/business/{slug}/account/",
+            lookup_field="number",
+            lookup_value=account_number,
+            business_slug=slug,
+        )
+        await get_client().request(
+            "POST",
+            f"/v1/business/{slug}/account/{account_id}/{params.action.value}/",
+            business_slug=slug,
+        )
+        return dump_model(
+            ActionResponse(account_number=account_number, action=params.action.value)
+        )
+
+    return await run_batch(params.account_numbers, _act)

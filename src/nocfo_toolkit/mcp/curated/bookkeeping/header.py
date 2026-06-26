@@ -8,14 +8,16 @@ from fastmcp.tools import tool
 from fastmcp.tools.tool import ToolAnnotations
 from fastmcp.exceptions import ToolError
 
+from nocfo_toolkit.mcp.curated.batch import run_batch
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.errors import raise_tool_error
 from nocfo_toolkit.mcp.curated.schemas import (
+    BatchResponse,
     HeaderIdInput,
     HeaderListInput,
-    HeaderPayloadInput,
     HeaderSummary,
     ListEnvelope,
+    PayloadsInput,
     dump_model_from_backend,
 )
 
@@ -88,16 +90,19 @@ async def bookkeeping_header_retrieve(params: HeaderIdInput) -> dict[str, Any]:
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Create an account header when account headers are enabled for the business.",
+    description="Create one or more account headers in a single call — pass each header as an entry in payloads. Available when account headers are enabled for the business.",
+    output_schema=BatchResponse.model_json_schema(),
 )
-async def bookkeeping_header_create(params: HeaderPayloadInput) -> dict[str, Any]:
-    args = params
-    slug = await business_slug(args.business)
+async def bookkeeping_header_create(params: PayloadsInput) -> dict[str, Any]:
+    slug = await business_slug(params.business)
     path = f"/v1/business/{slug}/header/"
-    result = await get_client().request(
-        "POST",
-        path,
-        json_body=args.payload,
-        business_slug=slug,
+
+    async def _create(payload: dict[str, Any]) -> dict[str, Any]:
+        result = await get_client().request(
+            "POST", path, json_body=payload, business_slug=slug
+        )
+        return dump_model_from_backend(HeaderSummary, result)
+
+    return await run_batch(
+        params.payloads, _create, label=lambda payload: payload.get("name")
     )
-    return dump_model_from_backend(HeaderSummary, result)

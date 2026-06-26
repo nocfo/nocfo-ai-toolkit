@@ -6,27 +6,30 @@ from typing import Any
 
 from fastmcp.tools import tool
 from fastmcp.tools.tool import ToolAnnotations
+from nocfo_toolkit.mcp.curated.batch import run_batch
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.errors import raise_tool_error
 from nocfo_toolkit.mcp.curated.schemas import (
-    DocumentActionInput,
+    BatchResponse,
+    DocumentCreatePayload,
+    DocumentCreatesInput,
     DocumentDetail,
     DocumentListItem,
     DocumentListInput,
-    DocumentNumberInput,
     DocumentRetrieveInput,
     DocumentSummary,
+    DocumentToolHandlesActionInput,
+    DocumentToolHandlesMutationInput,
     EntryListInput,
     EntrySummary,
     DeletedResponse,
     AgentDocumentBlueprintPayload,
     AgentBlueprintEntryPayload,
-    DocumentMutationInput,
     DocumentActiveSuggestionDetail,
     DocumentActiveSuggestionRetrieveInput,
     DocumentMutationPayload,
-    DocumentNumberMutationInput,
     ListEnvelope,
+    ToolHandlesInput,
     dump_model,
     dump_model_from_backend,
     dump_models,
@@ -42,7 +45,13 @@ from nocfo_toolkit.mcp.curated.utils import decode_tool_handle, items
         idempotentHint=True,
         openWorldHint=False,
     ),
-    description="List bookkeeping documents by document number, dates, contact, tag, account number, VAT code/rate, workflow state, or query.",
+    description=(
+        "List bookkeeping documents by document number, dates, contact, tag, account number, VAT code/rate, "
+        "workflow state, or query. Use this first to ground exact tool_handles before document update, delete, "
+        "lock, or unlock actions. For unlock requests, filter with is_locked=true, review the returned "
+        "tool_handles, and then pass those exact handles unchanged to bookkeeping_document_action with "
+        "action='unlock'."
+    ),
     output_schema=ListEnvelope[DocumentListItem].model_json_schema(),
 )
 async def bookkeeping_documents_list(
@@ -69,7 +78,12 @@ async def bookkeeping_documents_list(
         business_slug=slug,
         item_model=DocumentListItem,
         handle_resource="bookkeeping_document",
-        usage_hint="Use document_number/date filters to browse periods (e.g. one month). For account filtering, prefer account_number. Then pass tool_handle to bookkeeping_document_retrieve for full details.",
+        usage_hint=(
+            "Use document_number/date filters to browse periods (e.g. one month). For account filtering, prefer "
+            "account_number. For lock/unlock workflows, list the target documents first (for example with "
+            "is_locked=true), then pass the returned tool_handles unchanged to bookkeeping_document_action in one "
+            "batched call. Use bookkeeping_document_retrieve for full details when verification is needed."
+        ),
     )
     return result
 
@@ -82,7 +96,11 @@ async def bookkeeping_documents_list(
         idempotentHint=True,
         openWorldHint=False,
     ),
-    description="Retrieve one bookkeeping document from bookkeeping_documents_list.items[].tool_handle. Includes blueprint/entry/relation workflow summaries.",
+    description=(
+        "Retrieve one bookkeeping document from bookkeeping_documents_list.items[].tool_handle. Includes "
+        "blueprint/entry/relation workflow summaries. Use this when you need to verify a document before "
+        "deleting it or changing its state."
+    ),
 )
 async def bookkeeping_document_retrieve(
     params: DocumentRetrieveInput,
@@ -116,38 +134,36 @@ async def bookkeeping_document_retrieve(
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Create a bookkeeping document/business transaction. Blueprint is the editable posting plan; generated entries are returned for verification.",
+    description="Create one or more bookkeeping documents/business transactions in a single call — pass each document as an entry in payloads. Blueprint is the editable posting plan; generated entries are returned for verification.",
+    output_schema=BatchResponse.model_json_schema(),
 )
 async def bookkeeping_document_create(
-    params: DocumentMutationInput,
+    params: DocumentCreatesInput,
 ) -> dict[str, Any]:
-    args = params
-    slug = await business_slug(args.business)
-    if not isinstance(args.payload.blueprint, dict):
-        raise_tool_error(
-            "invalid_request",
-            "blueprint is required for bookkeeping_document_create.",
-            "Provide payload.blueprint as an object with document posting fields.",
-            status_code=400,
-        )
-    body = await resolve_document_payload(slug, args.payload, is_patch=False)
+    slug = await business_slug(params.business)
     path = f"/v1/business/{slug}/document/"
-    created = await get_client().request(
-        "POST",
-        path,
-        json_body=body,
-        business_slug=slug,
-    )
-    document_id = int(created["id"])
-    entries = await entries_for_document(slug, document_id)
-    return dump_model(
-        DocumentDetail.model_validate(
-            {
-                **created,
-                "entry_summary": dump_models(EntrySummary, entries[:20]),
-            }
+
+    async def _create(payload: DocumentCreatePayload) -> dict[str, Any]:
+        if not isinstance(payload.blueprint, dict):
+            raise_tool_error(
+                "invalid_request",
+                "blueprint is required for bookkeeping_document_create.",
+                "Provide payload.blueprint as an object with document posting fields.",
+                status_code=400,
+            )
+        body = await resolve_document_payload(slug, payload, is_patch=False)
+        created = await get_client().request(
+            "POST", path, json_body=body, business_slug=slug
         )
-    )
+        document_id = int(created["id"])
+        entries = await entries_for_document(slug, document_id)
+        return dump_model(
+            DocumentDetail.model_validate(
+                {**created, "entry_summary": dump_models(EntrySummary, entries[:20])}
+            )
+        )
+
+    return await run_batch(params.payloads, _create, label=lambda _payload: None)
 
 
 @tool(
@@ -158,35 +174,33 @@ async def bookkeeping_document_create(
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Update a document blueprint or metadata by tool_handle. This recalculates generated entries. If payload contains tag_names, those tags must already exist; create missing tags first with bookkeeping_tag_create.",
+    description="Update one or more document blueprints or metadata selected by tool_handles; the same payload is applied to every target and recalculates generated entries. If payload contains tag_names, those tags must already exist; create missing tags first with bookkeeping_tag_create.",
+    output_schema=BatchResponse.model_json_schema(),
 )
 async def bookkeeping_document_update(
-    params: DocumentNumberMutationInput,
+    params: DocumentToolHandlesMutationInput,
 ) -> dict[str, Any]:
-    args = params
-    slug = await business_slug(args.business)
-    document_id = decode_tool_handle(
-        args.tool_handle,
-        expected_resource="bookkeeping_document",
-    )
-    document = await document_by_id(slug, document_id)
-    body = await resolve_document_payload(slug, args.payload, is_patch=True)
-    path = f"/v1/business/{slug}/document/{document_id}/"
-    updated = await get_client().request(
-        "PATCH",
-        path,
-        json_body=body,
-        business_slug=slug,
-    )
-    entries = await entries_for_document(slug, int(document["id"]))
-    return dump_model(
-        DocumentDetail.model_validate(
-            {
-                **updated,
-                "entry_summary": dump_models(EntrySummary, entries[:20]),
-            }
+    slug = await business_slug(params.business)
+    body = await resolve_document_payload(slug, params.payload, is_patch=True)
+
+    async def _update(handle: str) -> dict[str, Any]:
+        document_id = decode_tool_handle(
+            handle, expected_resource="bookkeeping_document"
         )
-    )
+        updated = await get_client().request(
+            "PATCH",
+            f"/v1/business/{slug}/document/{document_id}/",
+            json_body=body,
+            business_slug=slug,
+        )
+        entries = await entries_for_document(slug, document_id)
+        return dump_model(
+            DocumentDetail.model_validate(
+                {**updated, "entry_summary": dump_models(EntrySummary, entries[:20])}
+            )
+        )
+
+    return await run_batch(params.tool_handles, _update)
 
 
 @tool(
@@ -197,25 +211,27 @@ async def bookkeeping_document_update(
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Delete a bookkeeping document selected by tool_handle.",
+    description="Delete one or more bookkeeping documents in a single call — pass every target in tool_handles. Prefer one batched call over repeated single-target calls (each call needs its own confirmation).",
+    output_schema=BatchResponse.model_json_schema(),
 )
 async def bookkeeping_document_delete(
-    params: DocumentNumberInput,
+    params: ToolHandlesInput,
 ) -> dict[str, Any]:
-    args = params
-    slug = await business_slug(args.business)
-    document_id = decode_tool_handle(
-        args.tool_handle,
-        expected_resource="bookkeeping_document",
-    )
-    document = await document_by_id(slug, document_id)
-    path = f"/v1/business/{slug}/document/{document_id}/"
-    await get_client().request(
-        "DELETE",
-        path,
-        business_slug=slug,
-    )
-    return dump_model(DeletedResponse(document_number=document.get("number")))
+    slug = await business_slug(params.business)
+
+    async def _delete(handle: str) -> dict[str, Any]:
+        document_id = decode_tool_handle(
+            handle, expected_resource="bookkeeping_document"
+        )
+        document = await document_by_id(slug, document_id)
+        await get_client().request(
+            "DELETE",
+            f"/v1/business/{slug}/document/{document_id}/",
+            business_slug=slug,
+        )
+        return dump_model(DeletedResponse(document_number=document.get("number")))
+
+    return await run_batch(params.tool_handles, _delete)
 
 
 @tool(
@@ -293,31 +309,30 @@ async def bookkeeping_document_active_suggestion_retrieve(
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Apply the active accounting suggestion for a draft document selected by tool_handle and finalize it.",
+    description="Apply the active accounting suggestion and finalize one or more draft documents in a single call — pass every target in tool_handles.",
+    output_schema=BatchResponse.model_json_schema(),
 )
 async def bookkeeping_document_finalize_active_suggestion(
-    params: DocumentNumberInput,
+    params: ToolHandlesInput,
 ) -> dict[str, Any]:
-    args = params
-    slug = await business_slug(args.business)
-    document_id = decode_tool_handle(
-        args.tool_handle,
-        expected_resource="bookkeeping_document",
-    )
-    path = (
-        f"/v1/mcp/business/{slug}/documents/{document_id}/"
-        "actions/finalize_active_suggestion/"
-    )
-    result = await get_client().request(
-        "POST",
-        path,
-        json_body={},
-        business_slug=slug,
-    )
-    return dump_model_from_backend(
-        DocumentSummary,
-        build_document_finalize_summary(result),
-    )
+    slug = await business_slug(params.business)
+
+    async def _finalize(handle: str) -> dict[str, Any]:
+        document_id = decode_tool_handle(
+            handle, expected_resource="bookkeeping_document"
+        )
+        path = (
+            f"/v1/mcp/business/{slug}/documents/{document_id}/"
+            "actions/finalize_active_suggestion/"
+        )
+        result = await get_client().request(
+            "POST", path, json_body={}, business_slug=slug
+        )
+        return dump_model_from_backend(
+            DocumentSummary, build_document_finalize_summary(result)
+        )
+
+    return await run_batch(params.tool_handles, _finalize)
 
 
 @tool(
@@ -328,27 +343,34 @@ async def bookkeeping_document_finalize_active_suggestion(
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Run a state action on a document selected by tool_handle: lock, unlock, flag, or unflag.",
+    description=(
+        "Run a state action (lock/unlock/flag/unflag) on one or more documents in a single call — pass every "
+        "target in tool_handles and the same action applies to all. Use this tool for requests such as 'unlock "
+        "locked documents' or 'lock these documents'. First obtain the exact tool_handles from "
+        "bookkeeping_documents_list or bookkeeping_document_retrieve, then pass those handles unchanged here. "
+        "Prefer one batched call over repeated single-document calls because each action call needs its own "
+        "confirmation. For unlocking, use action='unlock'; for locking, use action='lock'."
+    ),
+    output_schema=BatchResponse.model_json_schema(),
 )
 async def bookkeeping_document_action(
-    params: DocumentActionInput,
+    params: DocumentToolHandlesActionInput,
 ) -> dict[str, Any]:
-    args = params
-    slug = await business_slug(args.business)
-    document_id = decode_tool_handle(
-        args.tool_handle,
-        expected_resource="bookkeeping_document",
-    )
-    document = await document_by_id(slug, document_id)
-    path = f"/v1/business/{slug}/document/{document_id}/action/{args.action.value}/"
-    result = await get_client().request(
-        "POST",
-        path,
-        business_slug=slug,
-    )
-    return dump_model_from_backend(
-        DocumentSummary, result if isinstance(result, dict) else document
-    )
+    slug = await business_slug(params.business)
+
+    async def _act(handle: str) -> dict[str, Any]:
+        document_id = decode_tool_handle(
+            handle, expected_resource="bookkeeping_document"
+        )
+        path = (
+            f"/v1/business/{slug}/document/{document_id}/action/{params.action.value}/"
+        )
+        result = await get_client().request("POST", path, business_slug=slug)
+        if not isinstance(result, dict):
+            result = await document_by_id(slug, document_id)
+        return dump_model_from_backend(DocumentSummary, result)
+
+    return await run_batch(params.tool_handles, _act)
 
 
 async def document_by_number(slug: str, number: str) -> dict[str, Any]:

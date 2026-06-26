@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 
-from pydantic import AliasChoices, Field
+from typing import Annotated
 
+from pydantic import AliasChoices, BaseModel, BeforeValidator, ConfigDict, Field
+
+from nocfo_toolkit.mcp.curated.schema.batch import ToolHandlesInput, as_list
 from nocfo_toolkit.mcp.curated.schema.common import (
     AgentModel,
     BusinessContextInput,
@@ -16,7 +19,9 @@ class TagListInput(BusinessPaginationInput):
     pass
 
 
-class FileUploadInput(BusinessContextInput):
+class FileUploadSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
     filename: str = Field(
         validation_alias=AliasChoices("filename", "name"),
         description="File name to show for the uploaded attachment.",
@@ -25,6 +30,19 @@ class FileUploadInput(BusinessContextInput):
     content_type: str = Field(
         default="application/octet-stream",
         description="File media type, for example application/pdf or image/png.",
+    )
+
+
+class FileUploadsInput(BusinessContextInput):
+    files: Annotated[list[FileUploadSpec], BeforeValidator(as_list)] = Field(
+        description="One or more files to upload; one entry per attachment."
+    )
+
+
+class DocumentTagsBatchInput(ToolHandlesInput):
+    tag_names: list[str] = Field(
+        description="Tag names applied identically to every target document. Tags must already exist; "
+        "create missing tags first with bookkeeping_tag_create."
     )
 
 

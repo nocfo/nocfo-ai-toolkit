@@ -2,10 +2,18 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    model_validator,
+)
 
+from nocfo_toolkit.mcp.curated.schema.batch import ToolHandlesInput, as_list
 from nocfo_toolkit.mcp.curated.schema.common import (
     AgentModel,
     BusinessContextInput,
@@ -96,21 +104,21 @@ class DocumentCreatePayload(DocumentMutationPayload):
     )
 
 
-class DocumentMutationInput(BusinessContextInput):
-    payload: DocumentCreatePayload = Field(
-        description="Bookkeeping document write payload. blueprint is required."
+class DocumentCreatesInput(BusinessContextInput):
+    payloads: Annotated[list[DocumentCreatePayload], BeforeValidator(as_list)] = Field(
+        description="List of bookkeeping document write payloads; one entry per document to create. blueprint is required in each."
     )
 
 
-class DocumentNumberMutationInput(DocumentNumberInput):
+class DocumentToolHandlesMutationInput(ToolHandlesInput):
     payload: DocumentMutationPayload = Field(
-        description="Bookkeeping document write payload. blueprint is required."
+        description="Bookkeeping document write payload, applied identically to every target tool_handle."
     )
 
 
-class TagNamesInput(DocumentNumberInput):
-    tag_names: list[str] = Field(
-        description="Tag names to filter by or apply to the document."
+class DocumentToolHandlesActionInput(ToolHandlesInput):
+    action: enum_or_str(DocumentAction) = Field(
+        description="State action (lock/unlock/flag/unflag) to run on every target document."
     )
 
 
@@ -175,12 +183,6 @@ class DocumentRetrieveInput(BusinessContextInput):
     )
 
 
-class DocumentActionInput(DocumentNumberInput):
-    action: enum_or_str(DocumentAction) = Field(
-        description="Action to run on the selected resource."
-    )
-
-
 class EntryListInput(DocumentNumberInput):
     limit: int = Field(
         default=50, description="Maximum number of records to return in this page."
@@ -191,12 +193,17 @@ class EntryListInput(DocumentNumberInput):
     )
 
 
-class DocumentRelationCreateInput(DocumentNumberInput):
+class DocumentRelationCreateSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    document_number: str = Field(
+        description="Document number of the context document in the relation."
+    )
     related_document_number: str = Field(
         description="Document number of the other bookkeeping document in the relation."
     )
     role: enum_or_str(RelationRole) = Field(
-        description="Whether the current document is the accrual or settlement side of the relation."
+        description="Whether the context document is the accrual or settlement side of the relation."
     )
     type: enum_or_str(RelationType) = Field(
         default=RelationType.accrual_pair,
@@ -204,9 +211,20 @@ class DocumentRelationCreateInput(DocumentNumberInput):
     )
 
 
-class DocumentRelationIdInput(DocumentNumberInput):
-    relation_id: int = Field(
-        description="Relation ID from bookkeeping_document_relations_list. Use bookkeeping_document_relation_delete for this ID."
+class DocumentRelationCreatesInput(BusinessContextInput):
+    relations: Annotated[
+        list[DocumentRelationCreateSpec], BeforeValidator(as_list)
+    ] = Field(
+        description="One or more document-relation specs; one entry per relation to create."
+    )
+
+
+class DocumentRelationDeletesInput(BusinessContextInput):
+    document_number: str = Field(
+        description="Document number of the context document whose relations are deleted."
+    )
+    relation_ids: Annotated[list[int], BeforeValidator(as_list)] = Field(
+        description="One or more relation IDs (from bookkeeping_document_relations_list) to delete for this document."
     )
 
 

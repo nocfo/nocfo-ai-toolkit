@@ -349,12 +349,6 @@ class BusinessPaginationInput(PaginationInput):
     )
 
 
-class PayloadInput(BusinessContextInput):
-    payload: dict[str, Any] = Field(
-        description="Fields to create or update. Prefer user-facing values such as account_number, document_number, invoice_number, tag_names, or contact names when supported."
-    )
-
-
 class ToolHandleInput(BusinessContextInput):
     tool_handle: str = Field(
         description="Value copied from items[].tool_handle in a list response. Pass it unchanged to the matching retrieve tool."
@@ -391,21 +385,9 @@ class IdentifierInput(BusinessContextInput):
     )
 
 
-class IdentifierPayloadInput(IdentifierInput):
-    payload: dict[str, Any] = Field(
-        description="Fields to create or update. Prefer user-facing values such as account_number, document_number, invoice_number, tag_names, or contact names when supported."
-    )
-
-
 class IdInput(BusinessContextInput):
     id: int = Field(
         description="ID shown by the matching list or retrieve tool for this resource."
-    )
-
-
-class IdPayloadInput(IdInput):
-    payload: dict[str, Any] = Field(
-        description="Fields to create or update. Prefer user-facing values such as account_number, document_number, invoice_number, tag_names, or contact names when supported."
     )
 
 

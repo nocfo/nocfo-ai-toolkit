@@ -6,12 +6,15 @@ from typing import Any
 
 from fastmcp.tools import tool
 from fastmcp.tools.tool import ToolAnnotations
+from nocfo_toolkit.mcp.curated.batch import run_batch
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.bookkeeping.document import document_by_number
 from nocfo_toolkit.mcp.curated.schemas import (
+    BatchResponse,
     DeletedResponse,
-    DocumentRelationCreateInput,
-    DocumentRelationIdInput,
+    DocumentRelationCreatesInput,
+    DocumentRelationCreateSpec,
+    DocumentRelationDeletesInput,
     EntryListInput,
     ListEnvelope,
     RelationSummary,
@@ -28,7 +31,7 @@ from nocfo_toolkit.mcp.curated.schemas import (
         idempotentHint=True,
         openWorldHint=False,
     ),
-    description="List document-to-document relations for a context document.",
+    description="List document-to-document relations for a context document. Use this first to ground exact relation IDs before deleting relations.",
     output_schema=ListEnvelope[RelationSummary].model_json_schema(),
 )
 async def bookkeeping_document_relations_list(
@@ -80,28 +83,31 @@ async def bookkeeping_document_relation_suggestions_list(
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Create a relation between two documents using document numbers and relation role/type.",
+    description="Create one or more relations between documents in a single call — pass each relation (document numbers + role/type) as an entry in relations.",
+    output_schema=BatchResponse.model_json_schema(),
 )
 async def bookkeeping_document_relation_create(
-    params: DocumentRelationCreateInput,
+    params: DocumentRelationCreatesInput,
 ) -> dict[str, Any]:
-    args = params
-    slug = await business_slug(args.business)
-    document = await document_by_number(slug, args.document_number)
-    related = await document_by_number(slug, args.related_document_number)
-    path = f"/v1/business/{slug}/document/{document['id']}/relation/"
-    payload = {
-        "related_document": related["id"],
-        "role": args.role.value,
-        "type": args.type.value,
-    }
-    result = await get_client().request(
-        "POST",
-        path,
-        json_body=payload,
-        business_slug=slug,
+    slug = await business_slug(params.business)
+
+    async def _create(spec: DocumentRelationCreateSpec) -> dict[str, Any]:
+        document = await document_by_number(slug, spec.document_number)
+        related = await document_by_number(slug, spec.related_document_number)
+        path = f"/v1/business/{slug}/document/{document['id']}/relation/"
+        payload = {
+            "related_document": related["id"],
+            "role": spec.role.value,
+            "type": spec.type.value,
+        }
+        result = await get_client().request(
+            "POST", path, json_body=payload, business_slug=slug
+        )
+        return dump_model_from_backend(RelationSummary, result)
+
+    return await run_batch(
+        params.relations, _create, label=lambda spec: spec.document_number
     )
-    return dump_model_from_backend(RelationSummary, result)
 
 
 @tool(
@@ -112,18 +118,18 @@ async def bookkeeping_document_relation_create(
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Delete a relation listed for the same document context.",
+    description="Delete one or more relations for the same document context in a single call — pass every target in relation_ids. First ground the exact relation IDs with bookkeeping_document_relations_list, then batch all confirmed targets into one call. Never call this with guessed placeholders or an empty target set. Prefer one batched call over repeated single-relation calls.",
+    output_schema=BatchResponse.model_json_schema(),
 )
 async def bookkeeping_document_relation_delete(
-    params: DocumentRelationIdInput,
+    params: DocumentRelationDeletesInput,
 ) -> dict[str, Any]:
-    args = params
-    slug = await business_slug(args.business)
-    document = await document_by_number(slug, args.document_number)
-    path = f"/v1/business/{slug}/document/{document['id']}/relation/{args.relation_id}/"
-    await get_client().request(
-        "DELETE",
-        path,
-        business_slug=slug,
-    )
-    return dump_model(DeletedResponse(relation_id=args.relation_id))
+    slug = await business_slug(params.business)
+    document = await document_by_number(slug, params.document_number)
+
+    async def _delete(relation_id: int) -> dict[str, Any]:
+        path = f"/v1/business/{slug}/document/{document['id']}/relation/{relation_id}/"
+        await get_client().request("DELETE", path, business_slug=slug)
+        return dump_model(DeletedResponse(relation_id=relation_id))
+
+    return await run_batch(params.relation_ids, _delete)

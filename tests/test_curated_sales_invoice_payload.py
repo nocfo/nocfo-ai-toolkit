@@ -13,10 +13,12 @@ from nocfo_toolkit.mcp.curated.invoicing.sales_invoice import (
 )
 from nocfo_toolkit.mcp.curated.schema.invoicing.product import ProductSummary
 from nocfo_toolkit.mcp.curated.schema.invoicing.sales_invoice import (
-    SalesInvoiceActionInput,
-    SalesInvoiceLookupInput,
-    SalesInvoicePayloadInput,
     SalesInvoiceSummary,
+)
+from nocfo_toolkit.mcp.curated.schema.invoicing.sales_invoice_batch import (
+    SalesInvoiceTargetsActionInput,
+    SalesInvoiceTargetsInput,
+    SalesInvoiceTargetsPayloadInput,
 )
 from unittest.mock import patch
 
@@ -110,10 +112,10 @@ def test_sales_invoice_delete_accepts_tool_handle_selector() -> None:
             return None
 
     async def _run() -> None:
-        params = SalesInvoiceLookupInput.model_validate(
+        params = SalesInvoiceTargetsInput.model_validate(
             {
                 "business": "demo",
-                "tool_handle": base64.urlsafe_b64encode(
+                "tool_handles": base64.urlsafe_b64encode(
                     json.dumps(
                         {"resource": "invoicing_sales_invoice", "id": 77}
                     ).encode("utf-8")
@@ -131,7 +133,8 @@ def test_sales_invoice_delete_accepts_tool_handle_selector() -> None:
             ),
         ):
             result = await invoicing_sales_invoice_delete(params)
-        assert result["id"] == 77
+        assert result["succeeded"] == 1
+        assert result["results"][0]["result"]["id"] == 77
 
     asyncio.run(_run())
     assert calls == [("DELETE", "/v1/invoicing/demo/invoice/77/")]
@@ -148,10 +151,10 @@ def test_sales_invoice_update_accepts_tool_handle_selector() -> None:
             return {"id": 77, "status": "DRAFT"}
 
     async def _run() -> None:
-        params = SalesInvoicePayloadInput.model_validate(
+        params = SalesInvoiceTargetsPayloadInput.model_validate(
             {
                 "business": "demo",
-                "tool_handle": base64.urlsafe_b64encode(
+                "tool_handles": base64.urlsafe_b64encode(
                     json.dumps(
                         {"resource": "invoicing_sales_invoice", "id": 77}
                     ).encode("utf-8")
@@ -186,10 +189,10 @@ def test_sales_invoice_action_accepts_tool_handle_selector() -> None:
             return {"id": 77, "status": "ACCEPTED"}
 
     async def _run() -> None:
-        params = SalesInvoiceActionInput.model_validate(
+        params = SalesInvoiceTargetsActionInput.model_validate(
             {
                 "business": "demo",
-                "tool_handle": base64.urlsafe_b64encode(
+                "tool_handles": base64.urlsafe_b64encode(
                     json.dumps(
                         {"resource": "invoicing_sales_invoice", "id": 77}
                     ).encode("utf-8")

@@ -6,14 +6,17 @@ from typing import Any
 
 from fastmcp.tools import tool
 from fastmcp.tools.tool import ToolAnnotations
+from nocfo_toolkit.mcp.curated.batch import run_batch
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.schemas import (
     BalanceSheetReportInput,
+    BatchResponse,
     BusinessPaginationInput,
     DeletedResponse,
     EquityChangesReportInput,
     IdentifierInput,
-    IdentifierPayloadInput,
+    IdentifiersInput,
+    IdentifiersPayloadInput,
     IncomeStatementReportInput,
     JournalReportInput,
     LedgerReportInput,
@@ -36,7 +39,7 @@ from nocfo_toolkit.mcp.curated.utils import report_body
         idempotentHint=True,
         openWorldHint=False,
     ),
-    description="List accounting periods for the selected business.",
+    description="List accounting periods for the selected business. Use this first to ground exact period IDs before updating or deleting periods.",
     output_schema=ListEnvelope[PeriodListItem].model_json_schema(),
 )
 async def reporting_accounting_periods_list(
@@ -51,6 +54,7 @@ async def reporting_accounting_periods_list(
         limit=args.limit,
         business_slug=slug,
         item_model=PeriodListItem,
+        usage_hint="List or search periods here first, retrieve a period when verification is needed, and then batch the confirmed period IDs into one update/delete call.",
     )
 
 
@@ -91,26 +95,30 @@ async def reporting_accounting_period_retrieve(
         openWorldHint=False,
     ),
     description=(
-        "Update one accounting period by period ID from the accounting periods list. "
-        "This can fail when posted data protects the period."
+        "Update one or more accounting periods selected by identifiers (period IDs); the same payload is applied "
+        "to every period. Ground the exact period IDs first, then batch all confirmed targets into one call. Can "
+        "fail per period when posted data protects it."
     ),
+    output_schema=BatchResponse.model_json_schema(),
 )
 async def reporting_accounting_period_update(
-    params: IdentifierPayloadInput,
+    params: IdentifiersPayloadInput,
 ) -> dict[str, Any]:
-    args = params
-    slug = await business_slug(args.business)
-    period_id = get_client().require_numeric_identifier(
-        args.identifier, field_name="period_id"
-    )
-    path = f"/v1/business/{slug}/period/{period_id}/"
-    result = await get_client().request(
-        "PATCH",
-        path,
-        json_body=args.payload,
-        business_slug=slug,
-    )
-    return dump_model_from_backend(PeriodSummary, result)
+    slug = await business_slug(params.business)
+
+    async def _update(identifier: str) -> dict[str, Any]:
+        period_id = get_client().require_numeric_identifier(
+            identifier, field_name="period_id"
+        )
+        result = await get_client().request(
+            "PATCH",
+            f"/v1/business/{slug}/period/{period_id}/",
+            json_body=params.payload,
+            business_slug=slug,
+        )
+        return dump_model_from_backend(PeriodSummary, result)
+
+    return await run_batch(params.identifiers, _update)
 
 
 @tool(
@@ -121,23 +129,24 @@ async def reporting_accounting_period_update(
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Delete one accounting period by period ID from the accounting periods list.",
+    description="Delete one or more accounting periods in a single call — pass every target (period ID) in identifiers. Ground the exact period IDs first with reporting_accounting_periods_list and/or reporting_accounting_period_retrieve, then batch all confirmed targets into one call. Never call this with guessed placeholders or an empty target set. Prefer one batched call over repeated single-target calls (each call needs its own confirmation).",
+    output_schema=BatchResponse.model_json_schema(),
 )
 async def reporting_accounting_period_delete(
-    params: IdentifierInput,
+    params: IdentifiersInput,
 ) -> dict[str, Any]:
-    args = params
-    slug = await business_slug(args.business)
-    period_id = get_client().require_numeric_identifier(
-        args.identifier, field_name="period_id"
-    )
-    path = f"/v1/business/{slug}/period/{period_id}/"
-    await get_client().request(
-        "DELETE",
-        path,
-        business_slug=slug,
-    )
-    return dump_model(DeletedResponse(id=period_id))
+    slug = await business_slug(params.business)
+
+    async def _delete(identifier: str) -> dict[str, Any]:
+        period_id = get_client().require_numeric_identifier(
+            identifier, field_name="period_id"
+        )
+        await get_client().request(
+            "DELETE", f"/v1/business/{slug}/period/{period_id}/", business_slug=slug
+        )
+        return dump_model(DeletedResponse(id=period_id))
+
+    return await run_batch(params.identifiers, _delete)
 
 
 @tool(
@@ -148,7 +157,7 @@ async def reporting_accounting_period_delete(
         idempotentHint=True,
         openWorldHint=False,
     ),
-    description="List VAT periods for the selected business.",
+    description="List VAT periods for the selected business. Use this first to ground exact VAT period IDs before updating or deleting VAT periods.",
     output_schema=ListEnvelope[PeriodListItem].model_json_schema(),
 )
 async def reporting_vat_periods_list(
@@ -163,6 +172,7 @@ async def reporting_vat_periods_list(
         limit=args.limit,
         business_slug=slug,
         item_model=PeriodListItem,
+        usage_hint="List or search VAT periods here first, retrieve a VAT period when verification is needed, and then batch the confirmed VAT period IDs into one update/delete call.",
     )
 
 
@@ -199,26 +209,30 @@ async def reporting_vat_period_retrieve(params: IdentifierInput) -> dict[str, An
         openWorldHint=False,
     ),
     description=(
-        "Update one VAT period by VAT period ID from the VAT periods list. "
-        "The period must be editable and not reported."
+        "Update one or more VAT periods selected by identifiers (VAT period IDs); the same payload is applied to "
+        "every period. Ground the exact VAT period IDs first, then batch all confirmed targets into one call. "
+        "Each period must be editable and not reported."
     ),
+    output_schema=BatchResponse.model_json_schema(),
 )
 async def reporting_vat_period_update(
-    params: IdentifierPayloadInput,
+    params: IdentifiersPayloadInput,
 ) -> dict[str, Any]:
-    args = params
-    slug = await business_slug(args.business)
-    vat_period_id = get_client().require_numeric_identifier(
-        args.identifier, field_name="vat_period_id"
-    )
-    path = f"/v1/business/{slug}/vat_period/{vat_period_id}/"
-    result = await get_client().request(
-        "PATCH",
-        path,
-        json_body=args.payload,
-        business_slug=slug,
-    )
-    return dump_model_from_backend(PeriodSummary, result)
+    slug = await business_slug(params.business)
+
+    async def _update(identifier: str) -> dict[str, Any]:
+        vat_period_id = get_client().require_numeric_identifier(
+            identifier, field_name="vat_period_id"
+        )
+        result = await get_client().request(
+            "PATCH",
+            f"/v1/business/{slug}/vat_period/{vat_period_id}/",
+            json_body=params.payload,
+            business_slug=slug,
+        )
+        return dump_model_from_backend(PeriodSummary, result)
+
+    return await run_batch(params.identifiers, _update)
 
 
 @tool(
@@ -230,23 +244,28 @@ async def reporting_vat_period_update(
         openWorldHint=False,
     ),
     description=(
-        "Delete one VAT period by VAT period ID from the VAT periods list. "
-        "This can fail when linked records prevent deletion."
+        "Delete one or more VAT periods in a single call — pass every target (VAT period ID) in identifiers. "
+        "Ground the exact VAT period IDs first with reporting_vat_periods_list and/or reporting_vat_period_retrieve, "
+        "then batch all confirmed targets into one call. Never call this with guessed placeholders or an empty "
+        "target set. Prefer one batched call over repeated single-target calls (each call needs its own confirmation)."
     ),
+    output_schema=BatchResponse.model_json_schema(),
 )
-async def reporting_vat_period_delete(params: IdentifierInput) -> dict[str, Any]:
-    args = params
-    slug = await business_slug(args.business)
-    vat_period_id = get_client().require_numeric_identifier(
-        args.identifier, field_name="vat_period_id"
-    )
-    path = f"/v1/business/{slug}/vat_period/{vat_period_id}/"
-    await get_client().request(
-        "DELETE",
-        path,
-        business_slug=slug,
-    )
-    return dump_model(DeletedResponse(id=vat_period_id))
+async def reporting_vat_period_delete(params: IdentifiersInput) -> dict[str, Any]:
+    slug = await business_slug(params.business)
+
+    async def _delete(identifier: str) -> dict[str, Any]:
+        vat_period_id = get_client().require_numeric_identifier(
+            identifier, field_name="vat_period_id"
+        )
+        await get_client().request(
+            "DELETE",
+            f"/v1/business/{slug}/vat_period/{vat_period_id}/",
+            business_slug=slug,
+        )
+        return dump_model(DeletedResponse(id=vat_period_id))
+
+    return await run_batch(params.identifiers, _delete)
 
 
 async def run_report(report_type: str, report: Any) -> dict[str, Any]:

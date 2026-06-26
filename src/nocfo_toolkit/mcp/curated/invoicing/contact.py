@@ -6,16 +6,20 @@ from typing import Any
 
 from fastmcp.tools import tool
 from fastmcp.tools.tool import ToolAnnotations
+from nocfo_toolkit.mcp.curated.batch import run_batch
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.schemas import (
+    BatchResponse,
     ContactCreateInput,
+    ContactCreatesInput,
     ContactListItem,
     ContactListInput,
     ContactRetrieveInput,
     ContactSummary,
     ContactUpdateInput,
+    ContactUpdatesInput,
     DeletedResponse,
-    IdentifierInput,
+    IdentifiersInput,
     ListEnvelope,
     dump_model,
     dump_model_from_backend,
@@ -31,8 +35,11 @@ from nocfo_toolkit.mcp.curated.schemas import (
         openWorldHint=False,
     ),
     description=(
-        "List contacts for the selected business. Supports search and filters such as invoicing-enabled, "
-        "exact name, and excluded contact ID. Use `contact_business_id` to search by asiakastunnus."
+        "List contacts for the selected business. Use this first to ground contact IDs/tool_handles before "
+        "update or delete actions. Supports search and filters such as invoicing-enabled, exact name, and "
+        "excluded contact ID. For duplicate-review workflows, search by exact name or customer number first "
+        "and inspect the returned IDs before deleting anything. Use `contact_business_id` to search by "
+        "asiakastunnus."
     ),
     output_schema=ListEnvelope[ContactListItem].model_json_schema(),
 )
@@ -50,7 +57,12 @@ async def invoicing_contacts_list(
         business_slug=slug,
         item_model=ContactListItem,
         handle_resource="invoicing_contact",
-        usage_hint="Use contact_business_id for exact customer number lookup, then pass tool_handle to invoicing_contact_retrieve.",
+        usage_hint=(
+            "Use contact_business_id for exact customer number lookup. For duplicate cleanup, list matching "
+            "contacts first, review the returned IDs/tool_handles, optionally retrieve the candidates for "
+            "verification, and then pass the exact identifiers to invoicing_contact_delete in one batched "
+            "call."
+        ),
     )
 
 
@@ -62,7 +74,10 @@ async def invoicing_contacts_list(
         idempotentHint=True,
         openWorldHint=False,
     ),
-    description="Retrieve one contact by tool_handle or contact_id for exact follow-up.",
+    description=(
+        "Retrieve one contact by tool_handle or contact_id for exact follow-up. Use this to verify candidate "
+        "duplicate contacts before deleting or editing them."
+    ),
 )
 async def invoicing_contact_retrieve(
     params: ContactRetrieveInput,
@@ -91,19 +106,20 @@ async def invoicing_contact_retrieve(
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Create a contact for invoicing and bookkeeping workflows.",
+    description="Create one or more contacts for invoicing and bookkeeping workflows in a single call — pass each contact as an entry in contacts.",
+    output_schema=BatchResponse.model_json_schema(),
 )
-async def invoicing_contact_create(params: ContactCreateInput) -> dict[str, Any]:
+async def invoicing_contact_create(params: ContactCreatesInput) -> dict[str, Any]:
     slug = await business_slug(params.business)
     path = f"/v1/business/{slug}/contacts/"
-    payload = _build_contact_create_body(params)
-    result = await get_client().request(
-        "POST",
-        path,
-        json_body=payload,
-        business_slug=slug,
-    )
-    return dump_model_from_backend(ContactSummary, result)
+
+    async def _create(spec: ContactCreateInput) -> dict[str, Any]:
+        result = await get_client().request(
+            "POST", path, json_body=_build_contact_create_body(spec), business_slug=slug
+        )
+        return dump_model_from_backend(ContactSummary, result)
+
+    return await run_batch(params.contacts, _create, label=lambda spec: spec.name)
 
 
 @tool(
@@ -115,34 +131,38 @@ async def invoicing_contact_create(params: ContactCreateInput) -> dict[str, Any]
         openWorldHint=False,
     ),
     description=(
-        "Update one contact by contact ID or exact name. If the user gives asiakastunnus, "
-        "retrieve the contact by contact_business_id first."
+        "Update one or more contacts in a single call — pass each update spec (identifier + "
+        "fields to change) as an entry in contacts. If the user gives asiakastunnus, retrieve "
+        "the contact by contact_business_id first."
     ),
+    output_schema=BatchResponse.model_json_schema(),
 )
 async def invoicing_contact_update(
-    params: ContactUpdateInput,
+    params: ContactUpdatesInput,
 ) -> dict[str, Any]:
     slug = await business_slug(params.business)
-    contact_id = (
-        int(params.identifier)
-        if params.identifier.isdigit()
-        else await get_client().resolve_id(
-            f"/v1/business/{slug}/contacts/",
-            lookup_field="name",
-            lookup_value=params.identifier,
-            search_param="search",
+
+    async def _update(spec: ContactUpdateInput) -> dict[str, Any]:
+        contact_id = (
+            int(spec.identifier)
+            if spec.identifier.isdigit()
+            else await get_client().resolve_id(
+                f"/v1/business/{slug}/contacts/",
+                lookup_field="name",
+                lookup_value=spec.identifier,
+                search_param="search",
+                business_slug=slug,
+            )
+        )
+        result = await get_client().request(
+            "PATCH",
+            f"/v1/business/{slug}/contacts/{contact_id}/",
+            json_body=_build_contact_patch_body(spec),
             business_slug=slug,
         )
-    )
-    path = f"/v1/business/{slug}/contacts/{contact_id}/"
-    payload = _build_contact_patch_body(params)
-    result = await get_client().request(
-        "PATCH",
-        path,
-        json_body=payload,
-        business_slug=slug,
-    )
-    return dump_model_from_backend(ContactSummary, result)
+        return dump_model_from_backend(ContactSummary, result)
+
+    return await run_batch(params.contacts, _update, label=lambda spec: spec.identifier)
 
 
 @tool(
@@ -154,31 +174,36 @@ async def invoicing_contact_update(
         openWorldHint=False,
     ),
     description=(
-        "Delete one contact by contact ID or exact name. This can fail when the contact is already used "
-        "by invoices or bookkeeping documents."
+        "Delete one or more contacts in a single call — pass every target (contact ID or exact name) in "
+        "identifiers. Prefer one batched call over repeated single-contact calls because each destructive call "
+        "needs its own confirmation. For duplicate cleanup, always ground the targets with invoicing_contacts_list "
+        "and/or invoicing_contact_retrieve first, then delete only the exact extra records you verified. Never "
+        "call this with an empty identifiers list or guessed placeholders. This can fail per contact when it is "
+        "already used by invoices or bookkeeping documents."
     ),
+    output_schema=BatchResponse.model_json_schema(),
 )
-async def invoicing_contact_delete(params: IdentifierInput) -> dict[str, Any]:
-    args = params
-    slug = await business_slug(args.business)
-    contact_id = (
-        int(args.identifier)
-        if args.identifier.isdigit()
-        else await get_client().resolve_id(
-            f"/v1/business/{slug}/contacts/",
-            lookup_field="name",
-            lookup_value=args.identifier,
-            search_param="search",
-            business_slug=slug,
+async def invoicing_contact_delete(params: IdentifiersInput) -> dict[str, Any]:
+    slug = await business_slug(params.business)
+
+    async def _delete(identifier: str) -> dict[str, Any]:
+        contact_id = (
+            int(identifier)
+            if identifier.isdigit()
+            else await get_client().resolve_id(
+                f"/v1/business/{slug}/contacts/",
+                lookup_field="name",
+                lookup_value=identifier,
+                search_param="search",
+                business_slug=slug,
+            )
         )
-    )
-    path = f"/v1/business/{slug}/contacts/{contact_id}/"
-    await get_client().request(
-        "DELETE",
-        path,
-        business_slug=slug,
-    )
-    return dump_model(DeletedResponse(id=contact_id))
+        await get_client().request(
+            "DELETE", f"/v1/business/{slug}/contacts/{contact_id}/", business_slug=slug
+        )
+        return dump_model(DeletedResponse(id=contact_id))
+
+    return await run_batch(params.identifiers, _delete)
 
 
 def _build_contact_patch_body(params: ContactUpdateInput) -> dict[str, Any]:

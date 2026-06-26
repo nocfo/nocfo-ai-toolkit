@@ -23,12 +23,6 @@ class HeaderIdInput(BusinessContextInput):
     )
 
 
-class HeaderPayloadInput(BusinessContextInput):
-    payload: dict[str, object] = Field(
-        description="Fields to create or update. Prefer user-facing values such as account_number, document_number, invoice_number, tag_names, or contact names when supported."
-    )
-
-
 class HeaderSummary(AgentModel):
     tool_handle: str | None = Field(
         default=None,

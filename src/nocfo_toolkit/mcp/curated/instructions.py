@@ -15,6 +15,14 @@ Prefer user-facing identifiers: account numbers, document numbers, invoice
 numbers, contact names, tag names, and tool handles returned by list tools.
 For bookkeeping documents, `blueprint` is the editable posting plan and
 `entries` are generated evidence to verify after create/update.
+
+Mutating tools accept one or more targets. When the user asks to change, delete,
+or create several resources, make a single batched call with all targets (e.g.
+pass every tool_handle/number/id in the plural field, or every new record in
+`payloads`) instead of one call per resource. Each call needs exactly one
+confirmation and returns a per-target `BatchResponse`; if `failed > 0`, inspect
+`results[].error` and retry only the items whose `ok` is false. Batches are not
+atomic — targets that already succeeded are not rolled back when others fail.
 """
 
 BLUEPRINT_GUIDE = """# Blueprint Guide

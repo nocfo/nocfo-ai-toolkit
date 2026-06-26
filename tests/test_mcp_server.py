@@ -19,7 +19,6 @@ from nocfo_toolkit.mcp.curated.schemas import (
     DocumentActiveSuggestionRetrieveInput,
     DocumentDetail,
     DocumentListItem,
-    DocumentNumberInput,
     DocumentSummary,
     EntrySummary,
     ProductSummary,
@@ -28,6 +27,7 @@ from nocfo_toolkit.mcp.curated.schemas import (
     RelationSummary,
     SalesInvoiceListItem,
     SalesInvoiceSummary,
+    ToolHandlesInput,
 )
 from nocfo_toolkit.mcp.curated.utils import decode_tool_handle, encode_tool_handle
 from nocfo_toolkit.mcp.server import (
@@ -225,10 +225,10 @@ def test_curated_tools_use_pydantic_params_argument() -> None:
 
     invoice_action_schema = by_name["invoicing_sales_invoice_action"].parameters
     assert set(invoice_action_schema["properties"]) == {"params"}
-    assert "SalesInvoiceActionInput" in invoice_action_schema["$defs"]
+    assert "SalesInvoiceTargetsActionInput" in invoice_action_schema["$defs"]
 
     document_create_schema = by_name["bookkeeping_document_create"].parameters
-    assert "DocumentMutationInput" in document_create_schema["$defs"]
+    assert "DocumentCreatesInput" in document_create_schema["$defs"]
     payload_schema = document_create_schema["$defs"]["DocumentCreatePayload"]
     assert "blueprint" in payload_schema["required"]
     assert "tag_ids" not in payload_schema.get("required", [])
@@ -244,8 +244,8 @@ def test_curated_tools_use_pydantic_params_argument() -> None:
     finalize_schema = by_name[
         "bookkeeping_document_finalize_active_suggestion"
     ].parameters
-    finalize_fields = finalize_schema["$defs"]["DocumentNumberInput"]["properties"]
-    assert list(finalize_fields) == ["business", "tool_handle"]
+    finalize_fields = finalize_schema["$defs"]["ToolHandlesInput"]["properties"]
+    assert list(finalize_fields) == ["business", "tool_handles"]
 
 
 def test_number_lookup_resources_do_not_expose_internal_ids() -> None:
@@ -270,20 +270,15 @@ def test_number_lookup_resources_do_not_expose_internal_ids() -> None:
     by_name = {tool.name: tool for tool in tools}
 
     invoice_action_schema = by_name["invoicing_sales_invoice_action"].parameters
-    sales_action_fields = invoice_action_schema["$defs"]["SalesInvoiceActionInput"][
-        "properties"
-    ]
-    assert "invoice_number" in sales_action_fields
+    sales_action_fields = invoice_action_schema["$defs"][
+        "SalesInvoiceTargetsActionInput"
+    ]["properties"]
+    assert "invoice_numbers" in sales_action_fields
     assert "invoice_id" not in sales_action_fields
 
     for tool_name, schema_name, forbidden in (
         ("bookkeeping_account_retrieve", "AccountRetrieveInput", "account_id"),
         ("bookkeeping_document_retrieve", "DocumentRetrieveInput", "document_id"),
-        (
-            "bookkeeping_document_finalize_active_suggestion",
-            "DocumentNumberInput",
-            "document_number",
-        ),
         ("invoicing_sales_invoice_retrieve", "InvoiceRetrieveInput", "invoice_id"),
         ("invoicing_purchase_invoice_retrieve", "InvoiceRetrieveInput", "invoice_id"),
     ):
@@ -1107,9 +1102,9 @@ def test_finalize_active_suggestion_uses_existing_mcp_finalize(monkeypatch) -> N
 
     result = asyncio.run(
         bookkeeping_document_finalize_active_suggestion(
-            DocumentNumberInput(
+            ToolHandlesInput(
                 business="demo",
-                tool_handle=encode_tool_handle("bookkeeping_document", 42),
+                tool_handles=[encode_tool_handle("bookkeeping_document", 42)],
             )
         )
     )
@@ -1119,7 +1114,9 @@ def test_finalize_active_suggestion_uses_existing_mcp_finalize(monkeypatch) -> N
         captured["path"]
         == "/v1/mcp/business/demo/documents/42/actions/finalize_active_suggestion/"
     )
-    assert result["workflow"]["workflow_status"] == "finalized"
+    assert result["succeeded"] == 1
+    item = result["results"][0]["result"]
+    assert item["workflow"]["workflow_status"] == "finalized"
 
 
 def test_build_document_active_suggestion_detail_enriches_normal_api_payload() -> None:
