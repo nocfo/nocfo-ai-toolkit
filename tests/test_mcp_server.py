@@ -6,6 +6,8 @@ import json
 
 import httpx
 import pytest
+from fastmcp import FastMCP
+from pydantic import ValidationError
 
 from starlette.testclient import TestClient
 
@@ -48,12 +50,25 @@ from nocfo_toolkit.mcp.curated.bookkeeping.document import (
     bookkeeping_document_active_suggestion_retrieve,
     bookkeeping_document_finalize_active_suggestion,
 )
+from nocfo_toolkit.mcp.search import NocfoBM25SearchTransform
 
 
 def _jwt_with_payload(payload: dict[str, object]) -> str:
     raw = json.dumps(payload).encode("utf-8")
     encoded = base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
     return f"header.{encoded}.signature"
+
+
+def _tool_search_test_server() -> FastMCP:
+    server = FastMCP(
+        "NoCFO-test", transforms=[NocfoBM25SearchTransform(max_results=12)]
+    )
+
+    @server.tool
+    async def echo(value: int) -> dict[str, int]:
+        return {"value": value}
+
+    return server
 
 
 def test_runtime_contract_header_is_added_for_regular_v1_mcp_operations() -> None:
@@ -246,6 +261,110 @@ def test_curated_tools_use_pydantic_params_argument() -> None:
     ].parameters
     finalize_fields = finalize_schema["$defs"]["ToolHandlesInput"]["properties"]
     assert list(finalize_fields) == ["business", "tool_handles"]
+
+
+def test_tool_search_call_tool_schema_stays_object_shaped() -> None:
+    server = _tool_search_test_server()
+
+    tools = asyncio.run(server.list_tools(run_middleware=False))
+    by_name = {tool.name: tool for tool in tools}
+
+    assert set(by_name) == {"call_tool", "search_tools"}
+    schema = by_name["call_tool"].parameters
+    assert {item["type"] for item in schema["properties"]["arguments"]["anyOf"]} == {
+        "object",
+        "null",
+    }
+    assert {item["type"] for item in schema["properties"]["parameters"]["anyOf"]} == {
+        "object",
+        "null",
+    }
+
+
+def test_tool_search_call_tool_accepts_object_arguments() -> None:
+    server = _tool_search_test_server()
+
+    result = asyncio.run(
+        server.call_tool(
+            "call_tool",
+            {"name": "echo", "arguments": {"value": 1}},
+            run_middleware=False,
+        )
+    )
+
+    assert result.structured_content == {"value": 1}
+
+
+def test_tool_search_call_tool_accepts_stringified_arguments() -> None:
+    server = _tool_search_test_server()
+
+    result = asyncio.run(
+        server.call_tool(
+            "call_tool",
+            {"name": "echo", "arguments": '{"value": 1}'},
+            run_middleware=False,
+        )
+    )
+
+    assert result.structured_content == {"value": 1}
+
+
+def test_tool_search_call_tool_accepts_stringified_parameters_alias() -> None:
+    server = _tool_search_test_server()
+
+    result = asyncio.run(
+        server.call_tool(
+            "call_tool",
+            {"name": "echo", "parameters": '{"value": 2}'},
+            run_middleware=False,
+        )
+    )
+
+    assert result.structured_content == {"value": 2}
+
+
+def test_tool_search_call_tool_prefers_arguments_over_parameters_alias() -> None:
+    server = _tool_search_test_server()
+
+    result = asyncio.run(
+        server.call_tool(
+            "call_tool",
+            {
+                "name": "echo",
+                "arguments": '{"value": 3}',
+                "parameters": '{"value": 4}',
+            },
+            run_middleware=False,
+        )
+    )
+
+    assert result.structured_content == {"value": 3}
+
+
+def test_tool_search_call_tool_rejects_invalid_json_string_arguments() -> None:
+    server = _tool_search_test_server()
+
+    with pytest.raises(ValidationError, match="Input should be a valid JSON object"):
+        asyncio.run(
+            server.call_tool(
+                "call_tool",
+                {"name": "echo", "arguments": '{"value":'},
+                run_middleware=False,
+            )
+        )
+
+
+def test_tool_search_call_tool_rejects_non_object_json_string_arguments() -> None:
+    server = _tool_search_test_server()
+
+    with pytest.raises(ValidationError, match="Input should be a valid JSON object"):
+        asyncio.run(
+            server.call_tool(
+                "call_tool",
+                {"name": "echo", "arguments": "[1, 2, 3]"},
+                run_middleware=False,
+            )
+        )
 
 
 def test_number_lookup_resources_do_not_expose_internal_ids() -> None:

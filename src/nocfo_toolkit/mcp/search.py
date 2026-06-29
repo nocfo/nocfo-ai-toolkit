@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Sequence
 from typing import Annotated, Any
@@ -9,6 +10,7 @@ from typing import Annotated, Any
 from fastmcp.server.context import Context
 from fastmcp.server.transforms.search import BM25SearchTransform
 from fastmcp.tools.tool import Tool
+from pydantic import BeforeValidator
 
 # Seeded from nocfo-frontend localization terms (fi/en/sv/de) for core domains.
 _SYNONYM_GROUPS: dict[str, set[str]] = {
@@ -340,6 +342,23 @@ def _intent_ranked_tools(
     return ranked
 
 
+def _parse_call_tool_payload(value: Any) -> Any:
+    if value is None or isinstance(value, dict) or not isinstance(value, str):
+        return value
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError as exc:
+        raise ValueError("Input should be a valid JSON object") from exc
+    if isinstance(parsed, dict):
+        return parsed
+    raise ValueError("Input should be a valid JSON object")
+
+
+CallToolPayload = Annotated[
+    dict[str, Any] | None, BeforeValidator(_parse_call_tool_payload)
+]
+
+
 class NocfoBM25SearchTransform(BM25SearchTransform):
     """BM25 search transform with multilingual NoCFO synonym expansion."""
 
@@ -350,10 +369,10 @@ class NocfoBM25SearchTransform(BM25SearchTransform):
         async def call_tool(
             name: Annotated[str, "The name of the tool to call"],
             arguments: Annotated[
-                dict[str, Any] | None, "Arguments to pass to the tool"
+                CallToolPayload, "Arguments to pass to the tool"
             ] = None,
             parameters: Annotated[
-                dict[str, Any] | None,
+                CallToolPayload,
                 "Alias for arguments used by some LLM tool-call formats",
             ] = None,
             ctx: Context = None,  # type: ignore[assignment]  # ty:ignore[invalid-parameter-default]
