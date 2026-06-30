@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import AliasChoices, Field, model_validator
+from pydantic import AliasChoices, BeforeValidator, Field, model_validator
 
-from nocfo_toolkit.mcp.curated.schema.batch import AccountNumbersInput
+from nocfo_toolkit.mcp.curated.schema.batch import as_list
 from nocfo_toolkit.mcp.curated.schema.common import (
     AccountType,
     AccountAction,
     AgentModel,
     BusinessContextInput,
     BusinessPaginationInput,
+    StrictModel,
     enum_or_str,
     tool_handle,
 )
@@ -56,9 +57,19 @@ class AccountListInput(BusinessPaginationInput):
         return {key: value for key, value in params.items() if value is not None}
 
 
-class AccountNumbersActionInput(AccountNumbersInput):
+class AccountActionItem(StrictModel):
+    account_number: int = Field(
+        description="User-facing bookkeeping account number to act on, e.g. 1910."
+    )
     action: enum_or_str(AccountAction) = Field(
-        description="Action (show/hide) to run on every selected account."
+        description="Action (show/hide) for THIS account."
+    )
+
+
+class AccountActionsInput(BusinessContextInput):
+    actions: Annotated[list[AccountActionItem], BeforeValidator(as_list)] = Field(
+        description="One entry per account, each with its own action. Different accounts can get different actions (e.g. show some and hide others) in a single confirmed call.",
+        min_length=1,
     )
 
 

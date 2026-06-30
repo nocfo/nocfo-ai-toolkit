@@ -17,12 +17,14 @@ from nocfo_toolkit.mcp.curated.schemas import (
     DeletedResponse,
     DocumentSummary,
     DocumentTagsBatchInput,
+    FileDetail,
     FileSummary,
     FileUploadSpec,
     FileUploadsInput,
     IdInput,
     IdsInput,
-    IdsPayloadInput,
+    IdUpdateItem,
+    IdUpdatesInput,
     TagSummary,
     TagListInput,
     PayloadsInput,
@@ -127,22 +129,22 @@ async def bookkeeping_tag_retrieve(params: IdInput) -> dict[str, Any]:
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Update one or more business tags selected by ids; the same payload is applied to every tag. Ground the exact tag IDs first, then batch all confirmed targets into one call.",
+    description="Update one or more business tags in a single confirmed call — pass each update (id + the fields to change for THAT tag) as an entry in updates. Different tags can get different changes in one call. Ground the exact tag IDs first.",
     output_schema=BatchResponse.model_json_schema(),
 )
-async def bookkeeping_tag_update(params: IdsPayloadInput) -> dict[str, Any]:
+async def bookkeeping_tag_update(params: IdUpdatesInput) -> dict[str, Any]:
     slug = await business_slug(params.business)
 
-    async def _update(tag_id: int) -> dict[str, Any]:
+    async def _update(item: IdUpdateItem) -> dict[str, Any]:
         result = await get_client().request(
             "PATCH",
-            f"/v1/business/{slug}/tags/{tag_id}/",
-            json_body=params.payload,
+            f"/v1/business/{slug}/tags/{item.id}/",
+            json_body=item.payload,
             business_slug=slug,
         )
         return dump_model_from_backend(TagSummary, result)
 
-    return await run_batch(params.ids, _update)
+    return await run_batch(params.updates, _update, label=lambda item: item.id)
 
 
 @tool(
@@ -242,7 +244,7 @@ async def bookkeeping_files_list(params: TagListInput) -> dict[str, Any]:
         idempotentHint=True,
         openWorldHint=False,
     ),
-    description="Retrieve uploaded file metadata by file_id from bookkeeping_files_list. Use this to verify a file before updating or deleting it.",
+    description="Retrieve full detail for one uploaded file by file_id, including the recognized content extracted from it (analysis: detected document type, contact/merchant, total amount, dates, due date, payment reference) plus its analysis status. Use this to inspect what a file actually is — comparing its recognized fields against a document's contact, date, amount, and blueprint — before deleting it or attaching it to a document.",
 )
 async def bookkeeping_file_retrieve(params: IdInput) -> dict[str, Any]:
     args = params
@@ -250,7 +252,9 @@ async def bookkeeping_file_retrieve(params: IdInput) -> dict[str, Any]:
     result = await get_client().request(
         "GET", f"/v1/business/{slug}/files/{args.id}/", business_slug=slug
     )
-    return dump_model_from_backend(FileSummary, result)
+    detail = dict(result) if isinstance(result, dict) else {}
+    detail["analysis"] = _flatten_file_analysis(detail.get("analysis_results"))
+    return dump_model_from_backend(FileDetail, detail)
 
 
 @tool(
@@ -261,22 +265,22 @@ async def bookkeeping_file_retrieve(params: IdInput) -> dict[str, Any]:
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Update the metadata of one or more uploaded files selected by ids; the same payload is applied to every file. Ground the exact file IDs first, then batch all confirmed targets into one call.",
+    description="Update standalone metadata of one or more uploaded files in a single confirmed call — pass each update (id + the fields to change for THAT file, e.g. name or folder) as an entry in updates; different files can get different changes. This does NOT attach files to documents or change which files a document has. To attach or detach a document's files, use bookkeeping_documents_bulk_edit (an add_attachments/remove_attachments edit, one group per document) or pass attachment_ids to bookkeeping_document_create/bookkeeping_document_update. Ground the exact file IDs first with bookkeeping_files_list.",
     output_schema=BatchResponse.model_json_schema(),
 )
-async def bookkeeping_file_update(params: IdsPayloadInput) -> dict[str, Any]:
+async def bookkeeping_file_update(params: IdUpdatesInput) -> dict[str, Any]:
     slug = await business_slug(params.business)
 
-    async def _update(file_id: int) -> dict[str, Any]:
+    async def _update(item: IdUpdateItem) -> dict[str, Any]:
         result = await get_client().request(
             "PATCH",
-            f"/v1/business/{slug}/files/{file_id}/",
-            json_body=params.payload,
+            f"/v1/business/{slug}/files/{item.id}/",
+            json_body=item.payload,
             business_slug=slug,
         )
         return dump_model_from_backend(FileSummary, result)
 
-    return await run_batch(params.ids, _update)
+    return await run_batch(params.updates, _update, label=lambda item: item.id)
 
 
 @tool(
@@ -310,7 +314,7 @@ async def bookkeeping_file_delete(params: IdsInput) -> dict[str, Any]:
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Upload one or more file attachments from base64 content in a single call — pass each file as an entry in files. Returns the file handles for follow-up document workflows.",
+    description="Upload one or more file attachments from base64 content in a single call — pass each file as an entry in files. Returns the new file ids. To attach an uploaded file to a bookkeeping document, first review it with bookkeeping_file_retrieve, then attach by id with bookkeeping_documents_bulk_edit (an add_attachments edit, one group per document) or by passing attachment_ids to bookkeeping_document_create/bookkeeping_document_update.",
     output_schema=BatchResponse.model_json_schema(),
 )
 async def bookkeeping_file_upload(params: FileUploadsInput) -> dict[str, Any]:
@@ -331,6 +335,30 @@ async def bookkeeping_file_upload(params: FileUploadsInput) -> dict[str, Any]:
         return dump_model_from_backend(FileSummary, result)
 
     return await run_batch(params.files, _upload, label=lambda spec: spec.filename)
+
+
+def _flatten_file_analysis(analysis_results: Any) -> dict[str, Any] | None:
+    """Flatten backend content-analysis blocks into a {type: value} dict.
+
+    The file detail returns ``analysis_results`` as a list of blocks, each holding
+    ``values`` of ``{type, value}`` recognized fields (merchant, total, dates, etc.).
+    Flatten to a compact, agent-readable mapping for attach decisions.
+    """
+    if not isinstance(analysis_results, list):
+        return None
+    flat: dict[str, Any] = {}
+    for block in analysis_results:
+        if not isinstance(block, dict):
+            continue
+        values = block.get("values")
+        rows = values if isinstance(values, list) else [block]
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            key = row.get("type")
+            if key is not None and key not in flat:
+                flat[key] = row.get("value")
+    return flat or None
 
 
 def _is_duplicate_tag_name_error(exc: ToolError) -> bool:

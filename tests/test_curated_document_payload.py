@@ -144,6 +144,30 @@ def test_resolve_document_payload_uses_contact_name_field() -> None:
     }
 
 
+def test_resolve_document_payload_includes_attachment_ids() -> None:
+    async def _resolve_id(
+        list_path: str,
+        *,
+        lookup_field: str,
+        lookup_value: object,
+        business_slug: str,
+        search_param: str | None = None,
+    ) -> int:
+        raise AssertionError("resolve_id should not be called for attachment_ids")
+
+    async def _run() -> None:
+        client = SimpleNamespace(resolve_id=_resolve_id)
+        payload = DocumentMutationPayload.model_validate({"attachment_ids": [3, 7]})
+        with patch(
+            "nocfo_toolkit.mcp.curated.bookkeeping.document.get_client",
+            return_value=client,
+        ):
+            body = await resolve_document_payload("demo", payload, is_patch=False)
+        assert body["attachment_ids"] == [3, 7]
+
+    asyncio.run(_run())
+
+
 def test_document_list_query_params_include_vat_filters() -> None:
     params = DocumentListInput.model_validate(
         {

@@ -16,9 +16,10 @@ from nocfo_toolkit.mcp.curated.schemas import (
     DocumentDetail,
     DocumentListItem,
     DocumentListInput,
+    DocumentActionItem,
+    DocumentActionsInput,
     DocumentRetrieveInput,
     DocumentSummary,
-    DocumentToolHandlesActionInput,
     DocumentToolHandlesMutationInput,
     EntryListInput,
     EntrySummary,
@@ -98,8 +99,9 @@ async def bookkeeping_documents_list(
     ),
     description=(
         "Retrieve one bookkeeping document from bookkeeping_documents_list.items[].tool_handle. Includes "
-        "blueprint/entry/relation workflow summaries. Use this when you need to verify a document before "
-        "deleting it or changing its state."
+        "blueprint/entry/relation workflow summaries and the ids of files currently attached to the document "
+        "(attachment_ids). Use this when you need to verify a document before deleting it, changing its state, "
+        "or attaching/detaching files."
     ),
 )
 async def bookkeeping_document_retrieve(
@@ -120,6 +122,7 @@ async def bookkeeping_document_retrieve(
                 "blueprint": document.get("blueprint"),
                 "entry_summary": dump_models(EntrySummary, entries[:20]),
                 "tag_ids": document.get("tag_ids"),
+                "attachment_ids": document.get("attachment_ids"),
                 "relations": document.get("relations"),
             }
         )
@@ -344,33 +347,31 @@ async def bookkeeping_document_finalize_active_suggestion(
         openWorldHint=False,
     ),
     description=(
-        "Run a state action (lock/unlock/flag/unflag) on one or more documents in a single call — pass every "
-        "target in tool_handles and the same action applies to all. Use this tool for requests such as 'unlock "
-        "locked documents' or 'lock these documents'. First obtain the exact tool_handles from "
-        "bookkeeping_documents_list or bookkeeping_document_retrieve, then pass those handles unchanged here. "
-        "Prefer one batched call over repeated single-document calls because each action call needs its own "
-        "confirmation. For unlocking, use action='unlock'; for locking, use action='lock'."
+        "Run a state action (lock/unlock/flag/unflag) on one or more documents in a single confirmed call — "
+        "pass each action (tool_handle + the action for THAT document) as an entry in actions. Different "
+        "documents can get different actions (e.g. lock some and unlock others) in one call. Use this for "
+        "requests such as 'unlock locked documents' or 'lock these documents'. First obtain the exact "
+        "tool_handles from bookkeeping_documents_list or bookkeeping_document_retrieve."
     ),
     output_schema=BatchResponse.model_json_schema(),
 )
 async def bookkeeping_document_action(
-    params: DocumentToolHandlesActionInput,
+    params: DocumentActionsInput,
 ) -> dict[str, Any]:
     slug = await business_slug(params.business)
 
-    async def _act(handle: str) -> dict[str, Any]:
+    async def _act(item: DocumentActionItem) -> dict[str, Any]:
         document_id = decode_tool_handle(
-            handle, expected_resource="bookkeeping_document"
+            item.tool_handle, expected_resource="bookkeeping_document"
         )
-        path = (
-            f"/v1/business/{slug}/document/{document_id}/action/{params.action.value}/"
-        )
+        action_value = getattr(item.action, "value", item.action)
+        path = f"/v1/business/{slug}/document/{document_id}/action/{action_value}/"
         result = await get_client().request("POST", path, business_slug=slug)
         if not isinstance(result, dict):
             result = await document_by_id(slug, document_id)
         return dump_model_from_backend(DocumentSummary, result)
 
-    return await run_batch(params.tool_handles, _act)
+    return await run_batch(params.actions, _act, label=lambda item: item.tool_handle)
 
 
 async def document_by_number(slug: str, number: str) -> dict[str, Any]:
@@ -522,7 +523,14 @@ async def resolve_document_payload(
 
     extra_payload = payload.model_extra or {}
     for key, value in extra_payload.items():
-        if key in {"contact", "contact_id", "tag_names", "tag_ids", "blueprint"}:
+        if key in {
+            "contact",
+            "contact_id",
+            "tag_names",
+            "tag_ids",
+            "attachment_ids",
+            "blueprint",
+        }:
             continue
         if is_patch or value is not None:
             body[key] = value
@@ -600,6 +608,10 @@ async def resolve_document_payload(
                 )
             )
         body["tag_ids"] = tag_ids
+
+    attachment_ids_set = include_field("attachment_ids", payload.attachment_ids)
+    if attachment_ids_set:
+        body["attachment_ids"] = payload.attachment_ids
 
     blueprint_set = include_field("blueprint", payload.blueprint)
     if blueprint_set:

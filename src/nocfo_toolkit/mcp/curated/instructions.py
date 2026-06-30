@@ -23,6 +23,35 @@ pass every tool_handle/number/id in the plural field, or every new record in
 confirmation and returns a per-target `BatchResponse`; if `failed > 0`, inspect
 `results[].error` and retry only the items whose `ok` is false. Batches are not
 atomic — targets that already succeeded are not rolled back when others fail.
+
+Different targets can get DIFFERENT changes in one confirmation. The `*_update`
+tools take an `updates` list where each entry names one target and the fields to
+change for it — so e.g. renaming account 1910 to X and 2000 to Y, or setting a
+different due date on each of several invoices, is a single confirmed call, not one
+per target. (`invoicing_*_update` and `bookkeeping_account_update`/`tag_update`/
+`file_update` all follow this per-target shape.)
+
+For bookkeeping DOCUMENTS use `bookkeeping_documents_bulk_edit`, which both replaces
+content-derived values and gives different documents different edits in one call. It
+has a per-target mode (`documents`: a list of groups, each with its own tool_handles
+and edits — e.g. document A's account to 1090, documents B-D's to 1091, attach file 7
+to document A) and a uniform mode (`edits` + a selector — e.g. "change account 1910
+to 1031 on all documents"). Edits cover accounts, VAT codes/rates, tags, attachments,
+contact, date, and description. Prefer it over `bookkeeping_document_update` (which
+sets identical fields on a known handle set).
+
+Files (receipts, invoices, statements) attach to documents as evidence. A file's
+link to documents lives on the DOCUMENT, not on the file: `bookkeeping_file_update`
+only edits a file's own metadata and never changes a document's attachments.
+Attaching is per document — a receipt belongs to its own document — so attach with
+`bookkeeping_documents_bulk_edit` in per-target mode: one group per document, each
+with an add_attachments edit carrying that document's own file ids. Different
+documents get different files in a single confirmation. (You can also pass
+attachment_ids to `bookkeeping_document_create`/`bookkeeping_document_update` to set a
+single document's attachments.) Before attaching, decide whether the file truly
+belongs on the document: list likely-but-unattached files with
+`bookkeeping_document_suggested_attachments_list` and inspect a file's recognized
+content (merchant, type, total, dates) with `bookkeeping_file_retrieve`.
 """
 
 BLUEPRINT_GUIDE = """# Blueprint Guide

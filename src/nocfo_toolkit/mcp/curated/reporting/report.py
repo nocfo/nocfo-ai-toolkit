@@ -16,7 +16,8 @@ from nocfo_toolkit.mcp.curated.schemas import (
     EquityChangesReportInput,
     IdentifierInput,
     IdentifiersInput,
-    IdentifiersPayloadInput,
+    IdentifierUpdateItem,
+    IdentifierUpdatesInput,
     IncomeStatementReportInput,
     JournalReportInput,
     LedgerReportInput,
@@ -95,30 +96,30 @@ async def reporting_accounting_period_retrieve(
         openWorldHint=False,
     ),
     description=(
-        "Update one or more accounting periods selected by identifiers (period IDs); the same payload is applied "
-        "to every period. Ground the exact period IDs first, then batch all confirmed targets into one call. Can "
-        "fail per period when posted data protects it."
+        "Update one or more accounting periods in a single confirmed call — pass each update (period ID + the "
+        "fields to change for THAT period) as an entry in updates. Different periods can get different changes in "
+        "one call. Ground the exact period IDs first. Can fail per period when posted data protects it."
     ),
     output_schema=BatchResponse.model_json_schema(),
 )
 async def reporting_accounting_period_update(
-    params: IdentifiersPayloadInput,
+    params: IdentifierUpdatesInput,
 ) -> dict[str, Any]:
     slug = await business_slug(params.business)
 
-    async def _update(identifier: str) -> dict[str, Any]:
+    async def _update(item: IdentifierUpdateItem) -> dict[str, Any]:
         period_id = get_client().require_numeric_identifier(
-            identifier, field_name="period_id"
+            str(item.identifier), field_name="period_id"
         )
         result = await get_client().request(
             "PATCH",
             f"/v1/business/{slug}/period/{period_id}/",
-            json_body=params.payload,
+            json_body=item.payload,
             business_slug=slug,
         )
         return dump_model_from_backend(PeriodSummary, result)
 
-    return await run_batch(params.identifiers, _update)
+    return await run_batch(params.updates, _update, label=lambda item: item.identifier)
 
 
 @tool(
@@ -209,30 +210,30 @@ async def reporting_vat_period_retrieve(params: IdentifierInput) -> dict[str, An
         openWorldHint=False,
     ),
     description=(
-        "Update one or more VAT periods selected by identifiers (VAT period IDs); the same payload is applied to "
-        "every period. Ground the exact VAT period IDs first, then batch all confirmed targets into one call. "
-        "Each period must be editable and not reported."
+        "Update one or more VAT periods in a single confirmed call — pass each update (VAT period ID + the fields "
+        "to change for THAT period) as an entry in updates. Different periods can get different changes in one "
+        "call. Ground the exact VAT period IDs first. Each period must be editable and not reported."
     ),
     output_schema=BatchResponse.model_json_schema(),
 )
 async def reporting_vat_period_update(
-    params: IdentifiersPayloadInput,
+    params: IdentifierUpdatesInput,
 ) -> dict[str, Any]:
     slug = await business_slug(params.business)
 
-    async def _update(identifier: str) -> dict[str, Any]:
+    async def _update(item: IdentifierUpdateItem) -> dict[str, Any]:
         vat_period_id = get_client().require_numeric_identifier(
-            identifier, field_name="vat_period_id"
+            str(item.identifier), field_name="vat_period_id"
         )
         result = await get_client().request(
             "PATCH",
             f"/v1/business/{slug}/vat_period/{vat_period_id}/",
-            json_body=params.payload,
+            json_body=item.payload,
             business_slug=slug,
         )
         return dump_model_from_backend(PeriodSummary, result)
 
-    return await run_batch(params.identifiers, _update)
+    return await run_batch(params.updates, _update, label=lambda item: item.identifier)
 
 
 @tool(

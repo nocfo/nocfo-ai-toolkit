@@ -14,7 +14,8 @@ from nocfo_toolkit.mcp.curated.schemas import (
     DeletedResponse,
     IdentifierInput,
     IdentifiersInput,
-    IdentifiersPayloadInput,
+    IdentifierUpdateItem,
+    IdentifierUpdatesInput,
     ListEnvelope,
     PayloadsInput,
     ProductListItem,
@@ -130,15 +131,16 @@ async def invoicing_product_create(params: PayloadsInput) -> dict[str, Any]:
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Update one or more invoicing products selected by identifiers; the same payload is applied to every product. Keep amount and is_vat_inclusive aligned (true=VAT-inclusive amount, false=VAT-exclusive amount). Prefer resolving by product code. Ground the exact products first and batch all confirmed targets into one call.",
+    description="Update one or more invoicing products in a single confirmed call — pass each update (identifier + the fields to change for THAT product) as an entry in updates. Different products can get different changes in one call. Keep amount and is_vat_inclusive aligned (true=VAT-inclusive amount, false=VAT-exclusive amount). Prefer resolving by product code. Ground the exact products first.",
     output_schema=BatchResponse.model_json_schema(),
 )
 async def invoicing_product_update(
-    params: IdentifiersPayloadInput,
+    params: IdentifierUpdatesInput,
 ) -> dict[str, Any]:
     slug = await business_slug(params.business)
 
-    async def _update(identifier: str) -> dict[str, Any]:
+    async def _update(item: IdentifierUpdateItem) -> dict[str, Any]:
+        identifier = str(item.identifier)
         product_id = (
             int(identifier)
             if identifier.isdigit()
@@ -153,12 +155,12 @@ async def invoicing_product_update(
         result = await get_client().request(
             "PATCH",
             f"/v1/invoicing/{slug}/product/{product_id}/",
-            json_body=params.payload,
+            json_body=item.payload,
             business_slug=slug,
         )
         return dump_model_from_backend(ProductSummary, result)
 
-    return await run_batch(params.identifiers, _update)
+    return await run_batch(params.updates, _update, label=lambda item: item.identifier)
 
 
 @tool(
