@@ -15,10 +15,10 @@ from nocfo_toolkit.mcp.curated.schema.invoicing.product import ProductSummary
 from nocfo_toolkit.mcp.curated.schema.invoicing.sales_invoice import (
     SalesInvoiceSummary,
 )
+from nocfo_toolkit.mcp.curated.schema.batch import InvoiceUpdatesInput
 from nocfo_toolkit.mcp.curated.schema.invoicing.sales_invoice_batch import (
-    SalesInvoiceTargetsActionInput,
+    SalesInvoiceActionsInput,
     SalesInvoiceTargetsInput,
-    SalesInvoiceTargetsPayloadInput,
 )
 from unittest.mock import patch
 
@@ -151,15 +151,19 @@ def test_sales_invoice_update_accepts_tool_handle_selector() -> None:
             return {"id": 77, "status": "DRAFT"}
 
     async def _run() -> None:
-        params = SalesInvoiceTargetsPayloadInput.model_validate(
+        params = InvoiceUpdatesInput.model_validate(
             {
                 "business": "demo",
-                "tool_handles": base64.urlsafe_b64encode(
-                    json.dumps(
-                        {"resource": "invoicing_sales_invoice", "id": 77}
-                    ).encode("utf-8")
-                ).decode("ascii"),
-                "payload": {"description": "updated"},
+                "updates": [
+                    {
+                        "tool_handle": base64.urlsafe_b64encode(
+                            json.dumps(
+                                {"resource": "invoicing_sales_invoice", "id": 77}
+                            ).encode("utf-8")
+                        ).decode("ascii"),
+                        "payload": {"description": "updated"},
+                    }
+                ],
             }
         )
         with (
@@ -189,15 +193,19 @@ def test_sales_invoice_action_accepts_tool_handle_selector() -> None:
             return {"id": 77, "status": "ACCEPTED"}
 
     async def _run() -> None:
-        params = SalesInvoiceTargetsActionInput.model_validate(
+        params = SalesInvoiceActionsInput.model_validate(
             {
                 "business": "demo",
-                "tool_handles": base64.urlsafe_b64encode(
-                    json.dumps(
-                        {"resource": "invoicing_sales_invoice", "id": 77}
-                    ).encode("utf-8")
-                ).decode("ascii"),
-                "action": "accept",
+                "actions": [
+                    {
+                        "tool_handle": base64.urlsafe_b64encode(
+                            json.dumps(
+                                {"resource": "invoicing_sales_invoice", "id": 77}
+                            ).encode("utf-8")
+                        ).decode("ascii"),
+                        "action": "accept",
+                    }
+                ],
             }
         )
         with (

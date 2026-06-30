@@ -12,10 +12,11 @@ from nocfo_toolkit.mcp.curated.schemas import (
     BatchResponse,
     DeletedResponse,
     InvoiceRetrieveInput,
+    InvoiceUpdateItem,
+    InvoiceUpdatesInput,
     ListEnvelope,
     PurchaseInvoiceListItem,
     PurchaseInvoiceTargetsInput,
-    PurchaseInvoiceTargetsPayloadInput,
     PurchaseInvoicesListInput,
     PurchaseInvoiceSummary,
     dump_model,
@@ -100,29 +101,34 @@ async def invoicing_purchase_invoice_retrieve(
         openWorldHint=False,
     ),
     description=(
-        "Update one or more purchase invoices selected by invoice_numbers or tool_handles; the same payload is "
-        "applied to every invoice. Ground the exact targets first, then batch all confirmed purchase invoices into "
-        "one call."
+        "Update one or more purchase invoices in a single confirmed call — pass each update "
+        "(invoice_number or tool_handle, plus the fields to change for THAT invoice) as an entry in "
+        "updates. Different invoices can get different changes in one call. Ground the exact targets first."
     ),
     output_schema=BatchResponse.model_json_schema(),
 )
 async def invoicing_purchase_invoice_update(
-    params: PurchaseInvoiceTargetsPayloadInput,
+    params: InvoiceUpdatesInput,
 ) -> dict[str, Any]:
     slug = await business_slug(params.business)
-    targets, kind = _purchase_invoice_targets(params)
 
-    async def _update(target: int | str) -> dict[str, Any]:
-        purchase_invoice_id = await _resolve_target(slug, target, kind)
+    async def _update(item: InvoiceUpdateItem) -> dict[str, Any]:
+        purchase_invoice_id = await _resolve_purchase_invoice_update_target(slug, item)
         result = await get_client().request(
             "PATCH",
             f"/v1/invoicing/{slug}/purchase_invoice/{purchase_invoice_id}/",
-            json_body=params.payload,
+            json_body=item.payload,
             business_slug=slug,
         )
         return dump_model_from_backend(PurchaseInvoiceSummary, result)
 
-    return await run_batch(targets, _update)
+    return await run_batch(
+        params.updates,
+        _update,
+        label=lambda item: (
+            item.invoice_number if item.invoice_number is not None else item.tool_handle
+        ),
+    )
 
 
 @tool(
@@ -184,3 +190,9 @@ async def _resolve_target(slug: str, target: Any, kind: str) -> int:
         search_param="search",
         business_slug=slug,
     )
+
+
+async def _resolve_purchase_invoice_update_target(slug: str, item: Any) -> int:
+    if item.tool_handle is not None:
+        return await _resolve_target(slug, item.tool_handle, "tool_handle")
+    return await _resolve_target(slug, item.invoice_number, "invoice_number")

@@ -10,13 +10,22 @@ from fastmcp.exceptions import ToolError
 
 from nocfo_toolkit.mcp.curated.batch import run_batch
 from nocfo_toolkit.mcp.curated.bookkeeping.account import (
+    bookkeeping_account_action,
     bookkeeping_account_delete,
     bookkeeping_account_update,
 )
-from nocfo_toolkit.mcp.curated.bookkeeping.document import bookkeeping_document_delete
+from nocfo_toolkit.mcp.curated.bookkeeping.document import (
+    bookkeeping_document_action,
+    bookkeeping_document_delete,
+)
 from nocfo_toolkit.mcp.curated.invoicing.purchase_invoice import (
     invoicing_purchase_invoice_delete,
     invoicing_purchase_invoice_update,
+)
+from nocfo_toolkit.mcp.curated.invoicing.sales_invoice import (
+    invoicing_sales_invoice_action,
+    invoicing_sales_invoice_send,
+    invoicing_sales_invoice_update,
 )
 from nocfo_toolkit.mcp.curated.bookkeeping.tag_file import (
     bookkeeping_document_tags_update,
@@ -24,12 +33,16 @@ from nocfo_toolkit.mcp.curated.bookkeeping.tag_file import (
 )
 from nocfo_toolkit.mcp.curated.errors import raise_tool_error
 from nocfo_toolkit.mcp.curated.schemas import (
+    AccountActionsInput,
     AccountNumbersInput,
-    AccountNumbersPayloadInput,
+    AccountUpdatesInput,
+    DocumentActionsInput,
     DocumentTagsBatchInput,
+    InvoiceUpdatesInput,
     PayloadsInput,
     PurchaseInvoiceTargetsInput,
-    PurchaseInvoiceTargetsPayloadInput,
+    SalesInvoiceActionsInput,
+    SalesInvoiceSendsInput,
     SalesInvoiceTargetsInput,
     ToolHandlesInput,
 )
@@ -76,10 +89,15 @@ def _run_account_tool(tool, params, calls, *, failing_numbers=None):
         return asyncio.run(tool(params))
 
 
-def test_batch_update_applies_shared_payload_to_every_target() -> None:
+def test_account_update_applies_per_target_payloads() -> None:
+    # Heterogeneous: each account gets its OWN fields in one confirmed call.
     calls: list = []
-    params = AccountNumbersPayloadInput(
-        business="demo", account_numbers=[1910, 2000], payload={"name": "Renamed"}
+    params = AccountUpdatesInput(
+        business="demo",
+        updates=[
+            {"account_number": 1910, "payload": {"description": "Desc A"}},
+            {"account_number": 2000, "payload": {"description": "Desc B"}},
+        ],
     )
     result = _run_account_tool(bookkeeping_account_update, params, calls)
 
@@ -87,8 +105,10 @@ def test_batch_update_applies_shared_payload_to_every_target() -> None:
     assert result["succeeded"] == 2
     assert result["failed"] == 0
     patched = [c for c in calls if c[0] == "PATCH"]
-    assert len(patched) == 2
-    assert all(c[2] == {"name": "Renamed"} for c in patched)
+    # account_id is number*10 in the stub; each PATCH carries its own payload.
+    bodies = {path: body for _method, path, body in patched}
+    assert bodies["/v1/business/demo/account/19100/"] == {"description": "Desc A"}
+    assert bodies["/v1/business/demo/account/20000/"] == {"description": "Desc B"}
 
 
 def test_batch_delete_runs_once_per_target() -> None:
@@ -246,10 +266,14 @@ def test_purchase_invoice_update_accepts_tool_handle_selector() -> None:
     async def _slug(_: str) -> str:
         return "demo"
 
-    params = PurchaseInvoiceTargetsPayloadInput(
+    params = InvoiceUpdatesInput(
         business="demo",
-        tool_handles=encode_tool_handle("invoicing_purchase_invoice", 8),
-        payload={"reference": "updated"},
+        updates=[
+            {
+                "tool_handle": encode_tool_handle("invoicing_purchase_invoice", 8),
+                "payload": {"reference": "updated"},
+            }
+        ],
     )
     with (
         patch(
@@ -266,6 +290,49 @@ def test_purchase_invoice_update_accepts_tool_handle_selector() -> None:
     assert calls == [
         ("PATCH", "/v1/invoicing/demo/purchase_invoice/8/", {"reference": "updated"})
     ]
+
+
+def test_purchase_invoice_update_applies_per_target_payloads() -> None:
+    # Heterogeneous: two invoices, two different payloads, one call.
+    calls: list[tuple[str, str, dict[str, object] | None]] = []
+
+    async def _request(method, path, *, json_body=None, business_slug=None, **_kwargs):
+        calls.append((method, path, json_body))
+        return {"id": int(path.rstrip("/").split("/")[-1])}
+
+    client = SimpleNamespace(request=_request)
+
+    async def _slug(_: str) -> str:
+        return "demo"
+
+    params = InvoiceUpdatesInput(
+        business="demo",
+        updates=[
+            {
+                "tool_handle": encode_tool_handle("invoicing_purchase_invoice", 8),
+                "payload": {"reference": "A"},
+            },
+            {
+                "tool_handle": encode_tool_handle("invoicing_purchase_invoice", 9),
+                "payload": {"reference": "B"},
+            },
+        ],
+    )
+    with (
+        patch(
+            "nocfo_toolkit.mcp.curated.invoicing.purchase_invoice.business_slug", _slug
+        ),
+        patch(
+            "nocfo_toolkit.mcp.curated.invoicing.purchase_invoice.get_client",
+            return_value=client,
+        ),
+    ):
+        result = asyncio.run(invoicing_purchase_invoice_update(params))
+
+    assert result["succeeded"] == 2
+    bodies = {path: body for _method, path, body in calls if _method == "PATCH"}
+    assert bodies["/v1/invoicing/demo/purchase_invoice/8/"] == {"reference": "A"}
+    assert bodies["/v1/invoicing/demo/purchase_invoice/9/"] == {"reference": "B"}
 
 
 def test_document_tags_update_applies_shared_tags_to_each_handle() -> None:
@@ -387,3 +454,244 @@ def test_document_delete_batch_runs_once_per_handle() -> None:
         ("DELETE", "/v1/business/demo/document/5/"),
         ("DELETE", "/v1/business/demo/document/6/"),
     ]
+
+
+def test_account_action_applies_per_target_actions() -> None:
+    calls: list[tuple[str, str]] = []
+
+    async def _resolve_id(
+        list_path, *, lookup_field, lookup_value, business_slug, search_param=None
+    ):
+        return int(lookup_value) * 10
+
+    async def _request(method, path, *, business_slug=None, **_kwargs):
+        calls.append((method, path))
+        return None
+
+    client = SimpleNamespace(resolve_id=_resolve_id, request=_request)
+
+    async def _slug(_: str) -> str:
+        return "demo"
+
+    params = AccountActionsInput.model_validate(
+        {
+            "business": "demo",
+            "actions": [
+                {"account_number": 1910, "action": "hide"},
+                {"account_number": 2000, "action": "show"},
+            ],
+        }
+    )
+    with (
+        patch("nocfo_toolkit.mcp.curated.bookkeeping.account.business_slug", _slug),
+        patch(
+            "nocfo_toolkit.mcp.curated.bookkeeping.account.get_client",
+            return_value=client,
+        ),
+    ):
+        result = asyncio.run(bookkeeping_account_action(params))
+
+    assert result["succeeded"] == 2
+    assert ("POST", "/v1/business/demo/account/19100/hide/") in calls
+    assert ("POST", "/v1/business/demo/account/20000/show/") in calls
+
+
+def test_document_action_applies_per_target_actions() -> None:
+    calls: list[tuple[str, str]] = []
+
+    async def _request(method, path, *, business_slug=None, **_kwargs):
+        calls.append((method, path))
+        document_id = int(path.split("/document/")[1].split("/")[0])
+        return {"id": document_id, "number": f"BK-{document_id}"}
+
+    client = SimpleNamespace(request=_request)
+
+    async def _slug(_: str) -> str:
+        return "demo"
+
+    params = DocumentActionsInput.model_validate(
+        {
+            "business": "demo",
+            "actions": [
+                {
+                    "tool_handle": encode_tool_handle("bookkeeping_document", 5),
+                    "action": "lock",
+                },
+                {
+                    "tool_handle": encode_tool_handle("bookkeeping_document", 6),
+                    "action": "unlock",
+                },
+            ],
+        }
+    )
+    with (
+        patch("nocfo_toolkit.mcp.curated.bookkeeping.document.business_slug", _slug),
+        patch(
+            "nocfo_toolkit.mcp.curated.bookkeeping.document.get_client",
+            return_value=client,
+        ),
+    ):
+        result = asyncio.run(bookkeeping_document_action(params))
+
+    assert result["succeeded"] == 2
+    assert ("POST", "/v1/business/demo/document/5/action/lock/") in calls
+    assert ("POST", "/v1/business/demo/document/6/action/unlock/") in calls
+
+
+def test_sales_invoice_action_applies_per_target_actions() -> None:
+    calls: list[tuple[str, str]] = []
+
+    async def _resolve_id(
+        list_path, *, lookup_field, lookup_value, business_slug, search_param=None
+    ):
+        return int(lookup_value)
+
+    async def _request(method, path, *, business_slug=None, **_kwargs):
+        calls.append((method, path))
+        return {"id": 1, "status": "x"}
+
+    client = SimpleNamespace(resolve_id=_resolve_id, request=_request)
+
+    async def _slug(_: str) -> str:
+        return "demo"
+
+    params = SalesInvoiceActionsInput.model_validate(
+        {
+            "business": "demo",
+            "actions": [
+                {"invoice_number": 101, "action": "mark_paid"},
+                {"invoice_number": 102, "action": "mark_credit_loss"},
+            ],
+        }
+    )
+    with (
+        patch("nocfo_toolkit.mcp.curated.invoicing.sales_invoice.business_slug", _slug),
+        patch(
+            "nocfo_toolkit.mcp.curated.invoicing.sales_invoice.get_client",
+            return_value=client,
+        ),
+    ):
+        result = asyncio.run(invoicing_sales_invoice_action(params))
+
+    assert result["succeeded"] == 2
+    assert ("POST", "/v1/invoicing/demo/invoice/101/actions/paid/") in calls
+    assert ("POST", "/v1/invoicing/demo/invoice/102/actions/credit_loss/") in calls
+
+
+def test_sales_invoice_send_applies_per_target_delivery() -> None:
+    calls: list[tuple[str, str, dict | None]] = []
+
+    async def _resolve_id(
+        list_path, *, lookup_field, lookup_value, business_slug, search_param=None
+    ):
+        return int(lookup_value)
+
+    async def _request(method, path, *, json_body=None, business_slug=None, **_kwargs):
+        calls.append((method, path, json_body))
+        return {"id": 1}
+
+    client = SimpleNamespace(resolve_id=_resolve_id, request=_request)
+
+    async def _slug(_: str) -> str:
+        return "demo"
+
+    params = SalesInvoiceSendsInput.model_validate(
+        {
+            "business": "demo",
+            "sends": [
+                {
+                    "invoice_number": 101,
+                    "delivery_method": "EMAIL",
+                    "email_subject": "Invoice 101",
+                    "email_content": "Hi",
+                },
+                {"invoice_number": 102, "delivery_method": "EINVOICE"},
+            ],
+        }
+    )
+    with (
+        patch("nocfo_toolkit.mcp.curated.invoicing.sales_invoice.business_slug", _slug),
+        patch(
+            "nocfo_toolkit.mcp.curated.invoicing.sales_invoice.get_client",
+            return_value=client,
+        ),
+    ):
+        result = asyncio.run(invoicing_sales_invoice_send(params))
+
+    assert result["succeeded"] == 2
+    bodies = {path: body for _method, path, body in calls}
+    # Email delivery nests subject/content under data; e-invoice omits data.
+    assert bodies["/v1/invoicing/demo/invoice/101/send/"] == {
+        "delivery_method": "EMAIL",
+        "data": {"email_subject": "Invoice 101", "email_content": "Hi"},
+    }
+    assert bodies["/v1/invoicing/demo/invoice/102/send/"] == {
+        "delivery_method": "EINVOICE"
+    }
+
+
+def test_send_requires_email_subject_for_email_delivery() -> None:
+    with pytest.raises(ValueError):
+        SalesInvoiceSendsInput.model_validate(
+            {
+                "business": "demo",
+                "sends": [{"invoice_number": 1, "delivery_method": "EMAIL"}],
+            }
+        )
+    # Non-email methods do not require an email subject.
+    SalesInvoiceSendsInput.model_validate(
+        {
+            "business": "demo",
+            "sends": [{"invoice_number": 1, "delivery_method": "EINVOICE"}],
+        }
+    )
+
+
+def test_account_update_maps_friendly_name_to_name_translations() -> None:
+    # Backend `name` is read-only; the toolkit must write name_translations so a
+    # plain "rename" actually applies instead of silently no-opping.
+    calls: list = []
+    params = AccountUpdatesInput(
+        business="demo",
+        updates=[{"account_number": 1910, "payload": {"name": "Bank account"}}],
+    )
+    result = _run_account_tool(bookkeeping_account_update, params, calls)
+
+    assert result["succeeded"] == 1
+    body = [body for method, _path, body in calls if method == "PATCH"][0]
+    assert "name" not in body
+    assert body["name_translations"] == [
+        {"key": "fi", "value": "Bank account"},
+        {"key": "sv", "value": "Bank account"},
+        {"key": "en", "value": "Bank account"},
+        {"key": "de", "value": "Bank account"},
+    ]
+
+
+def test_sales_invoice_update_rejects_read_only_due_date() -> None:
+    async def _request(*_a, **_k):
+        raise AssertionError("no API call expected when due_date is rejected")
+
+    client = SimpleNamespace(request=_request)
+
+    async def _slug(_: str) -> str:
+        return "demo"
+
+    params = InvoiceUpdatesInput.model_validate(
+        {
+            "business": "demo",
+            "updates": [{"invoice_number": 101, "payload": {"due_date": "2026-01-01"}}],
+        }
+    )
+    with (
+        patch("nocfo_toolkit.mcp.curated.invoicing.sales_invoice.business_slug", _slug),
+        patch(
+            "nocfo_toolkit.mcp.curated.invoicing.sales_invoice.get_client",
+            return_value=client,
+        ),
+    ):
+        result = asyncio.run(invoicing_sales_invoice_update(params))
+
+    # Read-only due_date is surfaced as a clear per-item failure, not a silent no-op.
+    assert result["failed"] == 1
+    assert result["results"][0]["error"]["error_type"] == "invalid_request"

@@ -190,6 +190,8 @@ def test_create_server_registers_curated_tool_surface() -> None:
     assert "bookkeeping_accounts_list" in names
     assert "bookkeeping_accounts_search" not in names
     assert "bookkeeping_document_create" in names
+    assert "bookkeeping_documents_bulk_edit" in names
+    assert "bookkeeping_document_suggested_attachments_list" in names
     assert "bookkeeping_document_active_suggestion_retrieve" in names
     assert "bookkeeping_documents_search" not in names
     assert "bookkeeping_entries_list" in names
@@ -240,7 +242,7 @@ def test_curated_tools_use_pydantic_params_argument() -> None:
 
     invoice_action_schema = by_name["invoicing_sales_invoice_action"].parameters
     assert set(invoice_action_schema["properties"]) == {"params"}
-    assert "SalesInvoiceTargetsActionInput" in invoice_action_schema["$defs"]
+    assert "SalesInvoiceActionsInput" in invoice_action_schema["$defs"]
 
     document_create_schema = by_name["bookkeeping_document_create"].parameters
     assert "DocumentCreatesInput" in document_create_schema["$defs"]
@@ -389,10 +391,10 @@ def test_number_lookup_resources_do_not_expose_internal_ids() -> None:
     by_name = {tool.name: tool for tool in tools}
 
     invoice_action_schema = by_name["invoicing_sales_invoice_action"].parameters
-    sales_action_fields = invoice_action_schema["$defs"][
-        "SalesInvoiceTargetsActionInput"
-    ]["properties"]
-    assert "invoice_numbers" in sales_action_fields
+    sales_action_fields = invoice_action_schema["$defs"]["SalesInvoiceActionItem"][
+        "properties"
+    ]
+    assert "invoice_number" in sales_action_fields
     assert "invoice_id" not in sales_action_fields
 
     for tool_name, schema_name, forbidden in (

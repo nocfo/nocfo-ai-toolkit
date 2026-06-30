@@ -184,6 +184,31 @@ create/update workflows. `entries` are the realized journal lines generated from
 the blueprint and are read-only through MCP. Use `docs_blueprint` for a concise
 schema guide before mutating document bookkeeping.
 
+`bookkeeping_document_update` applies one identical payload to every target. When a
+change is derived from each document's content or differs per document, use
+`bookkeeping_documents_bulk_edit`, which edits one or many documents in a single
+confirmed call. It has two shapes:
+
+- **per-target** (`documents`): a list of groups, each with its own `tool_handles`
+  and `edits`, so different documents get different changes at once — e.g. document
+  A's account to `1090`, documents B–D's account to `1091`, attach file 7 to document
+  A.
+- **uniform** (`edits` + a selector): the same edits across every document matched by
+  `tool_handles` or filters — e.g. replace account `1910` with `1031` on all January
+  documents.
+
+Edits cover accounts, VAT codes/rates, tags, file attachments, contact, date, and
+description (set or find-and-replace).
+
+Files (receipts, invoices, statements) attach to documents as evidence, and the link
+lives on the document, not the file — `bookkeeping_file_update` only edits a file's
+own metadata. Attaching is per document, so use `bookkeeping_documents_bulk_edit` in
+per-target mode (one group per document with an `add_attachments` edit) — or pass
+`attachment_ids` to document create/update for a single document. To decide whether a
+file belongs on a document first, list likely-but-unattached candidates with
+`bookkeeping_document_suggested_attachments_list` and inspect a file's recognized
+content via `bookkeeping_file_retrieve`.
+
 ### MCP server modes
 
 - `nocfo mcp` = local stdio mode

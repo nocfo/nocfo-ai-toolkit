@@ -9,13 +9,15 @@ from fastmcp.tools.tool import ToolAnnotations
 from nocfo_toolkit.mcp.curated.batch import run_batch
 from nocfo_toolkit.mcp.curated.runtime import business_slug, get_client
 from nocfo_toolkit.mcp.curated.schemas import (
+    AccountActionItem,
+    AccountActionsInput,
     AccountListItem,
     AccountListInput,
-    AccountNumbersActionInput,
     AccountNumbersInput,
-    AccountNumbersPayloadInput,
     AccountRetrieveInput,
     AccountSummary,
+    AccountUpdateItem,
+    AccountUpdatesInput,
     ActionResponse,
     BatchResponse,
     DeletedResponse,
@@ -108,7 +110,7 @@ async def bookkeeping_account_retrieve(
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Create one or more bookkeeping accounts in a single call — pass each new account as an entry in payloads. Use account numbers and names that match the user request.",
+    description="Create one or more bookkeeping accounts in a single call — pass each new account as an entry in payloads. Use account numbers and names that match the user request; pass the account name as `name` (it is applied to every supported language).",
     output_schema=BatchResponse.model_json_schema(),
 )
 async def bookkeeping_account_create(params: PayloadsInput) -> dict[str, Any]:
@@ -117,7 +119,10 @@ async def bookkeeping_account_create(params: PayloadsInput) -> dict[str, Any]:
 
     async def _create(payload: dict[str, Any]) -> dict[str, Any]:
         result = await get_client().request(
-            "POST", path, json_body=payload, business_slug=slug
+            "POST",
+            path,
+            json_body=_resolve_account_payload(payload),
+            business_slug=slug,
         )
         return dump_model_from_backend(AccountSummary, result)
 
@@ -136,30 +141,55 @@ async def bookkeeping_account_create(params: PayloadsInput) -> dict[str, Any]:
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Update one or more bookkeeping accounts selected by account_numbers; the same payload is applied to every account. Ground the exact account numbers first, then batch all confirmed targets into one call.",
+    description="Update one or more bookkeeping accounts in a single confirmed call — pass each update (account_number + the fields to change for THAT account) as an entry in updates. To rename, set `name` in the payload (it is applied to every supported language). Different accounts can get different changes in one call (e.g. rename account 1910 to X and 2000 to Y). Ground the exact account numbers first.",
     output_schema=BatchResponse.model_json_schema(),
 )
 async def bookkeeping_account_update(
-    params: AccountNumbersPayloadInput,
+    params: AccountUpdatesInput,
 ) -> dict[str, Any]:
     slug = await business_slug(params.business)
 
-    async def _update(account_number: int) -> dict[str, Any]:
+    async def _update(item: AccountUpdateItem) -> dict[str, Any]:
         account_id = await get_client().resolve_id(
             f"/v1/business/{slug}/account/",
             lookup_field="number",
-            lookup_value=account_number,
+            lookup_value=item.account_number,
             business_slug=slug,
         )
         result = await get_client().request(
             "PATCH",
             f"/v1/business/{slug}/account/{account_id}/",
-            json_body=params.payload,
+            json_body=_resolve_account_payload(item.payload),
             business_slug=slug,
         )
         return dump_model_from_backend(AccountSummary, result)
 
-    return await run_batch(params.account_numbers, _update)
+    return await run_batch(
+        params.updates, _update, label=lambda item: item.account_number
+    )
+
+
+# Backend account `name` is read-only; the writable field is `name_translations`
+# (a list of {key, value} per language). The display name falls back across
+# languages, so applying the requested name to every supported language renames
+# the account everywhere.
+_ACCOUNT_NAME_LANGUAGES = ("fi", "sv", "en", "de")
+
+
+def _resolve_account_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Map a friendly account `name` to the backend's `name_translations` shape."""
+    body = dict(payload)
+    translations = body.get("name_translations")
+    name = body.pop("name", None)
+    if isinstance(translations, dict):
+        body["name_translations"] = [
+            {"key": key, "value": value} for key, value in translations.items()
+        ]
+    elif translations is None and name is not None:
+        body["name_translations"] = [
+            {"key": lang, "value": name} for lang in _ACCOUNT_NAME_LANGUAGES
+        ]
+    return body
 
 
 @tool(
@@ -201,28 +231,29 @@ async def bookkeeping_account_delete(params: AccountNumbersInput) -> dict[str, A
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Show or hide one or more bookkeeping accounts in a single call — pass every target in account_numbers and the same action applies to all. First obtain the exact account numbers from bookkeeping_accounts_list or bookkeeping_account_retrieve, then pass those values unchanged here. Prefer one batched call over repeated single-account calls.",
+    description="Show or hide one or more bookkeeping accounts in a single confirmed call — pass each action (account_number + the action for THAT account) as an entry in actions. Different accounts can get different actions (e.g. show some and hide others) in one call. First obtain the exact account numbers from bookkeeping_accounts_list or bookkeeping_account_retrieve.",
     output_schema=BatchResponse.model_json_schema(),
 )
 async def bookkeeping_account_action(
-    params: AccountNumbersActionInput,
+    params: AccountActionsInput,
 ) -> dict[str, Any]:
     slug = await business_slug(params.business)
 
-    async def _act(account_number: int) -> dict[str, Any]:
+    async def _act(item: AccountActionItem) -> dict[str, Any]:
         account_id = await get_client().resolve_id(
             f"/v1/business/{slug}/account/",
             lookup_field="number",
-            lookup_value=account_number,
+            lookup_value=item.account_number,
             business_slug=slug,
         )
+        action_value = getattr(item.action, "value", item.action)
         await get_client().request(
             "POST",
-            f"/v1/business/{slug}/account/{account_id}/{params.action.value}/",
+            f"/v1/business/{slug}/account/{account_id}/{action_value}/",
             business_slug=slug,
         )
         return dump_model(
-            ActionResponse(account_number=account_number, action=params.action.value)
+            ActionResponse(account_number=item.account_number, action=action_value)
         )
 
-    return await run_batch(params.account_numbers, _act)
+    return await run_batch(params.actions, _act, label=lambda item: item.account_number)

@@ -22,6 +22,7 @@ from nocfo_toolkit.mcp.curated.schema.common import (
     DocumentSide,
     RelationRole,
     RelationType,
+    StrictModel,
     enum_or_str,
     tool_handle,
 )
@@ -86,6 +87,10 @@ class DocumentMutationPayload(BaseModel):
     contact: str | None = Field(default=None)
     tag_names: list[str] | None = Field(default=None)
     tag_ids: list[int] | None = Field(default=None)
+    attachment_ids: list[int] | None = Field(
+        default=None,
+        description="File ids (from bookkeeping_file_upload or bookkeeping_files_list) to attach to THIS document as evidence, e.g. when creating a document from an uploaded receipt. Replaces this document's full attachment set. To attach different files to several documents, or to add/remove while keeping the rest, use bookkeeping_documents_bulk_edit. Review a file with bookkeeping_file_retrieve before attaching it.",
+    )
     blueprint: dict[str, Any] | None = Field(
         default=None,
         description="Editable posting plan. Required for bookkeeping document writes. For blueprint structure and required fields, call docs_retrieve with kind=blueprint. For valid VAT code/rate values used in blueprint rows, call constants_retrieve with kind=vat_codes and kind=vat_rates.",
@@ -116,9 +121,19 @@ class DocumentToolHandlesMutationInput(ToolHandlesInput):
     )
 
 
-class DocumentToolHandlesActionInput(ToolHandlesInput):
+class DocumentActionItem(StrictModel):
+    tool_handle: str = Field(
+        description="Document tool_handle to act on (from bookkeeping_documents_list/retrieve)."
+    )
     action: enum_or_str(DocumentAction) = Field(
-        description="State action (lock/unlock/flag/unflag) to run on every target document."
+        description="State action (lock/unlock/flag/unflag) for THIS document."
+    )
+
+
+class DocumentActionsInput(BusinessContextInput):
+    actions: Annotated[list[DocumentActionItem], BeforeValidator(as_list)] = Field(
+        description="One entry per document, each with its own state action. Different documents can get different actions (e.g. lock some and unlock others) in a single confirmed call.",
+        min_length=1,
     )
 
 
@@ -416,6 +431,10 @@ class DocumentDetail(DocumentSummary):
     )
     tag_ids: list[int] | None = Field(
         default=None, description="Tag IDs currently attached to the document."
+    )
+    attachment_ids: list[int] | None = Field(
+        default=None,
+        description="File ids currently attached to this document as evidence. Inspect a file with bookkeeping_file_retrieve; add or remove with bookkeeping_documents_bulk_edit; see likely-but-unattached candidates with bookkeeping_document_suggested_attachments_list.",
     )
     relations: Any | None = Field(
         default=None, description="Relations linking this document to other documents."

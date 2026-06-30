@@ -13,15 +13,19 @@ from nocfo_toolkit.mcp.curated.schemas import (
     BatchResponse,
     DeletedResponse,
     InvoiceRetrieveInput,
+    InvoiceUpdateItem,
+    InvoiceUpdatesInput,
     ListEnvelope,
     PayloadsInput,
     SalesInvoiceAction,
+    SalesInvoiceActionItem,
+    SalesInvoiceActionsInput,
     SalesInvoiceListItem,
     SalesInvoiceLookupInput,
     SalesInvoiceMutationPayload,
-    SalesInvoiceTargetsActionInput,
+    SalesInvoiceSendItem,
+    SalesInvoiceSendsInput,
     SalesInvoiceTargetsInput,
-    SalesInvoiceTargetsPayloadInput,
     SalesInvoicesListInput,
     SalesInvoiceSummary,
     dump_model,
@@ -121,18 +125,17 @@ async def invoicing_sales_invoice_create(params: PayloadsInput) -> dict[str, Any
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Update one or more sales invoices selected by invoice_numbers or tool_handles; the same payload is applied to every invoice. Ground the exact targets first, then batch all confirmed invoices into one call.",
+    description="Update one or more sales invoices in a single confirmed call — pass each update (invoice_number or tool_handle, plus the fields to change for THAT invoice) as an entry in updates. Different invoices can get different changes in one call. To change when an invoice is due, set payment_condition_days (the payment term in days) — due_date is derived from the invoicing date plus that term and cannot be set directly. Ground the exact targets first.",
     output_schema=BatchResponse.model_json_schema(),
 )
 async def invoicing_sales_invoice_update(
-    params: SalesInvoiceTargetsPayloadInput,
+    params: InvoiceUpdatesInput,
 ) -> dict[str, Any]:
     slug = await business_slug(params.business)
-    body = await resolve_sales_invoice_payload(slug, params.payload)
-    targets, kind = _sales_invoice_targets(params)
 
-    async def _update(target: int | str) -> dict[str, Any]:
-        item_id = await _resolve_target(slug, target, kind)
+    async def _update(item: InvoiceUpdateItem) -> dict[str, Any]:
+        body = await resolve_sales_invoice_payload(slug, item.payload)
+        item_id = await _resolve_invoice_item(slug, item)
         result = await get_client().request(
             "PATCH",
             f"/v1/invoicing/{slug}/invoice/{item_id}/",
@@ -141,7 +144,13 @@ async def invoicing_sales_invoice_update(
         )
         return dump_model_from_backend(SalesInvoiceSummary, result)
 
-    return await run_batch(targets, _update)
+    return await run_batch(
+        params.updates,
+        _update,
+        label=lambda item: (
+            item.invoice_number if item.invoice_number is not None else item.tool_handle
+        ),
+    )
 
 
 @tool(
@@ -180,11 +189,11 @@ async def invoicing_sales_invoice_delete(
         idempotentHint=False,
         openWorldHint=False,
     ),
-    description="Run a workflow action (accept, mark_paid, mark_unpaid, mark_credit_loss, or disable_recurrence) on one or more sales invoices in a single call — pass every target in invoice_numbers or tool_handles and the same action applies to all. Use this for requests such as accepting invoices or marking invoices paid/unpaid. First obtain the exact targets from invoicing_sales_invoices_list or invoicing_sales_invoice_retrieve, then pass those values unchanged here. Prefer one batched call over repeated single-invoice calls.",
+    description="Run a workflow action (accept, mark_paid, mark_unpaid, mark_credit_loss, or disable_recurrence) on one or more sales invoices in a single confirmed call — pass each action (invoice_number or tool_handle, plus the action for THAT invoice) as an entry in actions. Different invoices can get different actions (e.g. mark one paid and another credit_loss) in one call. First obtain the exact targets from invoicing_sales_invoices_list or invoicing_sales_invoice_retrieve.",
     output_schema=BatchResponse.model_json_schema(),
 )
 async def invoicing_sales_invoice_action(
-    params: SalesInvoiceTargetsActionInput,
+    params: SalesInvoiceActionsInput,
 ) -> dict[str, Any]:
     slug = await business_slug(params.business)
     path_by_action = {
@@ -194,11 +203,17 @@ async def invoicing_sales_invoice_action(
         SalesInvoiceAction.mark_credit_loss: "credit_loss",
         SalesInvoiceAction.disable_recurrence: "disable_recurrence",
     }
-    action_mapped = path_by_action[params.action]
-    targets, kind = _sales_invoice_targets(params)
 
-    async def _act(target: int | str) -> dict[str, Any]:
-        item_id = await _resolve_target(slug, target, kind)
+    async def _act(item: SalesInvoiceActionItem) -> dict[str, Any]:
+        action_mapped = path_by_action.get(item.action)
+        if action_mapped is None:
+            raise_tool_error(
+                "invalid_request",
+                f"Unsupported sales invoice action: {item.action}.",
+                "Use accept, mark_paid, mark_unpaid, mark_credit_loss, or disable_recurrence.",
+                status_code=400,
+            )
+        item_id = await _resolve_invoice_item(slug, item)
         result = await get_client().request(
             "POST",
             f"/v1/invoicing/{slug}/invoice/{item_id}/actions/{action_mapped}/",
@@ -206,7 +221,13 @@ async def invoicing_sales_invoice_action(
         )
         return dump_model_from_backend(SalesInvoiceSummary, result)
 
-    return await run_batch(targets, _act)
+    return await run_batch(
+        params.actions,
+        _act,
+        label=lambda item: (
+            item.invoice_number if item.invoice_number is not None else item.tool_handle
+        ),
+    )
 
 
 @tool(
@@ -241,26 +262,31 @@ async def invoicing_sales_invoice_delivery_methods(
         idempotentHint=False,
         openWorldHint=True,
     ),
-    description="Send one or more sales invoices using a selected delivery method — pass every target in invoice_numbers or tool_handles and the same payload (delivery method) is applied to all. First ground the exact targets with invoicing_sales_invoices_list or invoicing_sales_invoice_retrieve, and check invoicing_sales_invoice_delivery_methods when needed. Call only after the user explicitly confirms sending. Prefer one batched call over repeated single-invoice sends.",
+    description="Send one or more sales invoices in a single confirmed call — pass each send (invoice_number or tool_handle, a delivery_method, and for EMAIL an email_subject + optional email_content) as an entry in sends. Different invoices can use different delivery methods in one call. Each invoice must be in ACCEPTED state first. Ground the exact targets with invoicing_sales_invoices_list or invoicing_sales_invoice_retrieve, and check invoicing_sales_invoice_delivery_methods when needed. Call only after the user explicitly confirms sending.",
     output_schema=BatchResponse.model_json_schema(),
 )
 async def invoicing_sales_invoice_send(
-    params: SalesInvoiceTargetsPayloadInput,
+    params: SalesInvoiceSendsInput,
 ) -> dict[str, Any]:
     slug = await business_slug(params.business)
-    targets, kind = _sales_invoice_targets(params)
 
-    async def _send(target: int | str) -> dict[str, Any]:
-        item_id = await _resolve_target(slug, target, kind)
+    async def _send(item: SalesInvoiceSendItem) -> dict[str, Any]:
+        item_id = await _resolve_invoice_item(slug, item)
         result = await get_client().request(
             "POST",
             f"/v1/invoicing/{slug}/invoice/{item_id}/send/",
-            json_body=params.payload,
+            json_body=_build_send_body(item),
             business_slug=slug,
         )
         return dump_model_from_backend(SalesInvoiceSummary, result)
 
-    return await run_batch(targets, _send)
+    return await run_batch(
+        params.sends,
+        _send,
+        label=lambda item: (
+            item.invoice_number if item.invoice_number is not None else item.tool_handle
+        ),
+    )
 
 
 async def resolve_sales_invoice_payload(
@@ -277,6 +303,15 @@ async def resolve_sales_invoice_payload(
         slug = str(payload_or_slug)
         payload_data = payload
         client = getattr(slug_or_ctx, "client", None) or get_client()
+
+    if isinstance(payload_data, dict) and "due_date" in payload_data:
+        raise_tool_error(
+            "invalid_request",
+            "due_date is read-only; it is calculated from the invoicing date and the payment term.",
+            "To change when an invoice is due, set payment_condition_days (the payment term in days): "
+            "due_date = invoicing_date + payment_condition_days.",
+            status_code=400,
+        )
 
     body = SalesInvoiceMutationPayload.model_validate(payload_data).model_dump(
         mode="json",
@@ -368,3 +403,26 @@ async def _resolve_target(slug: str, target: Any, kind: str) -> int:
         lookup_value=target,
         business_slug=slug,
     )
+
+
+async def _resolve_invoice_item(slug: str, item: Any) -> int:
+    """Resolve a single invoice id from an item carrying invoice_number XOR tool_handle."""
+    if item.tool_handle is not None:
+        return await _resolve_target(slug, item.tool_handle, "tool_handle")
+    return await _resolve_target(slug, item.invoice_number, "invoice_number")
+
+
+def _build_send_body(item: Any) -> dict[str, Any]:
+    """Backend send shape: {delivery_method, data:{email_subject, email_content}}.
+
+    The backend `data` serializer requires both keys for email delivery (content is
+    nullable), so include email_content explicitly (null when not provided).
+    """
+    method = getattr(item.delivery_method, "value", item.delivery_method)
+    body: dict[str, Any] = {"delivery_method": method}
+    if item.email_subject is not None or item.email_content is not None:
+        body["data"] = {
+            "email_subject": item.email_subject,
+            "email_content": item.email_content,
+        }
+    return body

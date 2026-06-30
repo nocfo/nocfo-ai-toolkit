@@ -46,12 +46,6 @@ class PurchaseInvoiceTargetsInput(BusinessContextInput):
         return self
 
 
-class PurchaseInvoiceTargetsPayloadInput(PurchaseInvoiceTargetsInput):
-    payload: dict[str, Any] = Field(
-        description="Fields to update, applied identically to every target purchase invoice."
-    )
-
-
 class PurchaseInvoiceSummary(AgentModel):
     tool_handle: str | None = Field(
         default=None,

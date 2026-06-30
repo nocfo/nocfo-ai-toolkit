@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from pydantic import AliasChoices, BaseModel, BeforeValidator, ConfigDict, Field
 
@@ -69,7 +69,7 @@ class FileSummary(AgentModel):
     )
     id: int | None = Field(
         default=None,
-        description="File ID. Use bookkeeping_file_retrieve to expand this ID.",
+        description="File ID. Use bookkeeping_file_retrieve to expand this ID, and to attach the file to a document with bookkeeping_documents_bulk_edit (an add_attachments edit).",
     )
     name: str | None = Field(default=None, description="Display name.")
     file_name: str | None = Field(
@@ -77,14 +77,42 @@ class FileSummary(AgentModel):
     )
     content_type: str | None = Field(
         default=None,
+        validation_alias=AliasChoices("content_type", "type"),
         description="File media type, for example application/pdf or image/png.",
     )
     size: int | None = Field(
         default=None, description="File size in bytes when available."
+    )
+    analysis_status: str | None = Field(
+        default=None,
+        description="Status of automatic content analysis (e.g. pending, complete, failed).",
+    )
+    analysis_badges: Any | None = Field(
+        default=None,
+        description="Extracted highlights from the file's content, such as its detected date and total amount. Use these — together with the document's own date/amount/contact — to judge whether the file truly belongs on a document before attaching it.",
     )
     created_at: str | None = Field(
         default=None, description="When this record was created."
     )
     updated_at: str | None = Field(
         default=None, description="When this record was last updated."
+    )
+
+
+class FileDetail(FileSummary):
+    """Full file detail, including recognized content for attach decisions."""
+
+    analysis: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Recognized fields extracted from the file's content, keyed by type — e.g. "
+            "ATTACHMENT_TYPE (invoice/receipt), CONTACT_NAME (merchant/issuer), TOTAL_AMOUNT, "
+            "CURRENCY_CODE, INVOICE_DATE/RECEIPT_DATE, INVOICE_DUE_DATE, PAYMENT_REFERENCE. "
+            "Compare these against the document's contact, date, amount, and blueprint to decide "
+            "whether this file truly belongs on the document before attaching it."
+        ),
+    )
+    analysis_results: Any | None = Field(
+        default=None,
+        description="Raw per-block content-analysis output when available, for deeper inspection.",
     )
